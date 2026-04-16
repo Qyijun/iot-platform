@@ -22,14 +22,14 @@
 #define FIRMWARE_VERSION "2.0.1"
 
 // ========== WiFi配置 (手动修改) ==========
-char WIFI_SSID[32] = "qiuyijun";
-char WIFI_PASSWORD[64] = "Qiuyijun123";
+char WIFI_SSID[32] = "WiFi名";
+char WIFI_PASSWORD[64] = "WiFi密码";
 
 // ========== MQTT服务器配置 ==========
-#define MQTT_SERVER "192.168.1.3"
+#define MQTT_SERVER "服务器ip"
 #define MQTT_PORT 1883
-#define MQTT_USER "qiuyijun"
-#define MQTT_PASS "Qiuyijun.13825401705"
+#define MQTT_USER "你的mqtt用户名"
+#define MQTT_PASS "你的mqtt密码"
 
 // ========== 引脚定义 ==========
 #define LED_PIN 2              // 板载LED（可被命令控制 + 心跳灯）
