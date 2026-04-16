@@ -79,7 +79,7 @@
               <el-icon><Monitor /></el-icon>
               蓝牙配网
             </el-button>
-            <el-button type="warning" plain @click="router.push('/settings')">
+            <el-button type="warning" plain @click="router.push('/settings/basic')">
               <el-icon><Setting /></el-icon>
               系统设置
             </el-button>

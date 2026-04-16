@@ -20,6 +20,19 @@ export const BUTTON_PERMISSIONS = {
   DEVICE_EDIT: 'device:edit',
   DEVICE_DELETE: 'device:delete',
   DEVICE_CONTROL: 'device:control',
+  // 分组权限
+  GROUP_VIEW: 'group:view',
+  GROUP_ADD: 'group:add',
+  GROUP_EDIT: 'group:edit',
+  GROUP_DELETE: 'group:delete',
+  // 固件权限
+  FIRMWARE_VIEW: 'firmware:view',
+  FIRMWARE_UPLOAD: 'firmware:upload',
+  FIRMWARE_DOWNLOAD: 'firmware:download',
+  FIRMWARE_DELETE: 'firmware:delete',
+  FIRMWARE_UPGRADE: 'firmware:upgrade',
+  // 蓝牙权限
+  BLUETOOTH_VIEW: 'bluetooth:view',
   // 用户权限
   USER_VIEW: 'user:view',
   USER_ADD: 'user:add',
@@ -32,6 +45,8 @@ export const BUTTON_PERMISSIONS = {
   ROLE_EDIT: 'role:edit',
   ROLE_DELETE: 'role:delete',
   ROLE_PERMISSION: 'role:permission',
+  // 日志权限
+  LOG_VIEW: 'log:view',
   // 系统设置权限
   SYSTEM_VIEW: 'system:view',
   SETTINGS_BASIC: 'settings:basic',
@@ -86,29 +101,60 @@ export const useUserStore = defineStore('user', () => {
       }
     }
     
-    // 根据实际菜单权限码判断（与后端 PERMISSIONS.MENU_xxx 对应）
+    // 根据实际权限码判断
+    const hasDevicePerms = hasAnyPermission([
+      'device:view', 'device:add', 'device:edit', 'device:delete', 'device:control',
+      'group:view', 'group:add', 'group:edit', 'group:delete',
+      'firmware:view', 'firmware:upload', 'firmware:download', 'firmware:delete',
+      'bluetooth:view'
+    ])
+    
     return {
-      device: hasPermissionSync('menu:device'),
-      bluetooth: hasPermissionSync('menu:bluetooth'),
-      user: hasPermissionSync('menu:user'),
-      role: hasPermissionSync('menu:role'),
-      settings: hasPermissionSync('menu:settings')
+      device: hasDevicePerms,
+      bluetooth: hasPermissionSync('bluetooth:view'),
+      user: hasAnyPermission(['user:view', 'user:add', 'user:edit', 'user:delete', 'user:role']),
+      role: hasPermissionSync('role:view'),
+      settings: hasPermissionSync('system:view')
     }
   }
   
   // 获取按钮权限
   const getButtonPermissions = (type) => {
     if (isAdmin.value) {
-      return { view: true, add: true, edit: true, delete: true, control: true, role: true }
+      return { view: true, add: true, edit: true, delete: true, control: true, role: true, move: true, clear: true, upload: true, download: true, upgrade: true }
     }
-    
+
     switch (type) {
       case 'device':
         return {
+          view: permissions.value.includes('device:view'),
           add: permissions.value.includes('device:add'),
           edit: permissions.value.includes('device:edit'),
           delete: permissions.value.includes('device:delete'),
           control: permissions.value.includes('device:control')
+        }
+      case 'group':
+        return {
+          view: permissions.value.includes('group:view'),
+          add: permissions.value.includes('group:add'),
+          edit: permissions.value.includes('group:edit'),
+          delete: permissions.value.includes('group:delete'),
+          deviceAdd: permissions.value.includes('group:device:add'),
+          deviceRemove: permissions.value.includes('group:device:remove'),
+          deviceMove: permissions.value.includes('group:device:move'),
+          deviceClear: permissions.value.includes('group:device:clear')
+        }
+      case 'firmware':
+        return {
+          view: permissions.value.includes('firmware:view'),
+          upload: permissions.value.includes('firmware:upload'),
+          download: permissions.value.includes('firmware:download'),
+          delete: permissions.value.includes('firmware:delete'),
+          upgrade: permissions.value.includes('firmware:upgrade')
+        }
+      case 'bluetooth':
+        return {
+          view: permissions.value.includes('bluetooth:view')
         }
       case 'user':
         return {
@@ -124,6 +170,10 @@ export const useUserStore = defineStore('user', () => {
           edit: permissions.value.includes('role:edit'),
           delete: permissions.value.includes('role:delete'),
           permission: permissions.value.includes('role:permission')
+        }
+      case 'log':
+        return {
+          view: permissions.value.includes('log:view')
         }
       default:
         return {}

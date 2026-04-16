@@ -179,35 +179,81 @@
         <el-card>
           <template #header>
             <span>实时数据</span>
-            <el-tag v-if="realtimeData" type="success" size="small" style="margin-left: 10px;" :class="{ 'blink': dataBlink }">实时</el-tag>
+            <el-tag v-if="realtimeData || systemInfo" type="success" size="small" style="margin-left: 10px;" :class="{ 'blink': dataBlink }">实时</el-tag>
           </template>
-          <div v-if="realtimeData" class="realtime-data">
-            <el-row :gutter="12">
-              <el-col 
-                v-for="(value, key) in realtimeData" 
-                :key="key"
-                :xs="12" :sm="8" :md="6"
-                style="margin-bottom: 12px;"
-              >
-                <div class="data-item">
-                  <div class="data-value">{{ formatValue(value) }}</div>
-                  <div class="data-label">{{ getLabel(key) }}</div>
-                </div>
-              </el-col>
-            </el-row>
+          <div v-if="realtimeData || systemInfo" class="realtime-data">
+            <!-- 传感器数据 -->
+            <div v-if="realtimeData">
+              <el-row :gutter="12">
+                <el-col
+                  v-for="(value, key) in realtimeData"
+                  :key="key"
+                  :xs="12" :sm="8" :md="6"
+                  style="margin-bottom: 12px;"
+                >
+                  <div class="data-item">
+                    <div class="data-value">{{ formatValue(value) }}</div>
+                    <div class="data-label">{{ getLabel(key) }}</div>
+                  </div>
+                </el-col>
+              </el-row>
+            </div>
+            <!-- 系统信息 -->
+            <div v-if="systemInfo" class="system-info-section">
+              <el-divider content-position="left">系统信息</el-divider>
+              <el-row :gutter="12">
+                <el-col v-if="systemInfo.uptime" :xs="12" :sm="6" style="margin-bottom: 8px;">
+                  <div class="data-item small">
+                    <div class="data-value">{{ formatUptime(systemInfo.uptime) }}</div>
+                    <div class="data-label">运行时间</div>
+                  </div>
+                </el-col>
+                <el-col v-if="systemInfo.version" :xs="12" :sm="6" style="margin-bottom: 8px;">
+                  <div class="data-item small">
+                    <div class="data-value">v{{ systemInfo.version }}</div>
+                    <div class="data-label">固件版本</div>
+                  </div>
+                </el-col>
+                <el-col v-if="systemInfo.ip" :xs="12" :sm="6" style="margin-bottom: 8px;">
+                  <div class="data-item small">
+                    <div class="data-value">{{ systemInfo.ip }}</div>
+                    <div class="data-label">IP地址</div>
+                  </div>
+                </el-col>
+                <el-col v-if="systemInfo.free_heap" :xs="12" :sm="6" style="margin-bottom: 8px;">
+                  <div class="data-item small">
+                    <div class="data-value">{{ formatMemory(systemInfo.free_heap) }}</div>
+                    <div class="data-label">空闲内存</div>
+                  </div>
+                </el-col>
+              </el-row>
+            </div>
             <div class="data-raw">
               <span class="data-time">更新时间: {{ lastUpdateTime }}</span>
               <el-link type="primary" size="small" @click="showRawData = !showRawData">
                 {{ showRawData ? '收起' : '查看原始数据' }}
               </el-link>
-              <div v-if="showRawData" class="raw-json">
-                <code>{{ JSON.stringify(realtimeData, null, 2) }}</code>
+              <div v-if="showRawData" class="raw-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>字段</th>
+                      <th>值</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(value, key) in { ...realtimeData, ...systemInfo }" :key="key">
+                      <td>{{ getLabel(key) }}</td>
+                      <td>{{ formatRawValue(value, key) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
           <el-empty v-else description="暂无实时数据，请等待设备上报数据..." />
         </el-card>
-        
+
         <!-- 历史数据图表 -->
         <el-card style="margin-top: 20px;">
           <template #header>
@@ -332,17 +378,71 @@ const showRawData = ref(false)
 const lastUpdateTime = ref('')
 const dataBlink = ref(false)
 
+// 本地缓存的实时数据（页面加载时获取）
+const cachedData = ref(null)
+// 本地缓存的系统信息
+const cachedSystemInfo = ref({})
+// 实时的系统信息（直接用 ref 存储，确保响应式）
+const realtimeSystemInfo = ref(null)
+
+// 上一次的数据快照（用于比较是否变化）
+let lastDataSnapshot = null
+
+// 显示的字段（传感器数据：温度、湿度、电池电压、信号强度）
+const DISPLAY_FIELDS = ['temperature', 'humidity', 'battery', 'rssi']
+// 系统信息字段（显示在实时数据下方）
+const SYSTEM_FIELDS = ['uptime', 'version', 'ip', 'free_heap']
+
+// 实时数据：只显示传感器数据（温度、湿度、电池电压、信号强度）
 const realtimeData = computed(() => {
-  const data = wsStore.deviceData.get(deviceId)
-  if (data) {
-    lastUpdateTime.value = new Date().toLocaleTimeString('zh-CN')
-    // 触发闪烁效果
-    dataBlink.value = true
-    setTimeout(() => {
-      dataBlink.value = false
-    }, 500)
+  const wsData = wsStore.deviceData.get(deviceId)
+  let sourceData = null
+  
+  // 优先使用 WebSocket 遥测数据
+  if (wsData && wsData.temperature !== undefined) {
+    sourceData = wsData
+  } else if (cachedData.value && cachedData.value.temperature !== undefined) {
+    // 否则使用缓存的遥测数据
+    sourceData = cachedData.value
   }
-  return data
+  
+  // 过滤只显示指定字段
+  if (sourceData) {
+    const filtered = {}
+    DISPLAY_FIELDS.forEach(field => {
+      if (sourceData[field] !== undefined) {
+        filtered[field] = sourceData[field]
+      }
+    })
+    
+    // 检查数据是否真的变化了
+    const currentStr = JSON.stringify(filtered)
+    if (lastDataSnapshot !== currentStr && Object.keys(filtered).length > 0) {
+      lastDataSnapshot = currentStr
+      lastUpdateTime.value = new Date().toLocaleTimeString('zh-CN')
+      dataBlink.value = true
+      setTimeout(() => { dataBlink.value = false }, 500)
+    }
+    
+    return Object.keys(filtered).length > 0 ? filtered : null
+  }
+  
+  return null
+})
+
+// 系统信息：运行时间、版本号、IP地址、内存（合并实时数据和缓存）
+const systemInfo = computed(() => {
+  const result = { ...cachedSystemInfo.value }
+  // 从 WebSocket store 缓存获取
+  const wsCache = wsStore.systemCache.get(deviceId)
+  if (wsCache) {
+    Object.assign(result, wsCache)
+  }
+  // 用实时数据覆盖
+  if (realtimeSystemInfo.value) {
+    Object.assign(result, realtimeSystemInfo.value)
+  }
+  return Object.keys(result).length > 0 ? result : null
 })
 
 // ============ 图表相关 ============
@@ -528,27 +628,60 @@ const formatValue = (value) => {
   return value
 }
 
-// 获取字段中文标签
+// 获取字段中文标签（带单位）
 const getLabel = (key) => {
   const labels = {
-    battery: '电池电压',
-    voltage: '电压',
-    temperature: '温度',
-    temp: '温度',
-    humidity: '湿度',
-    humidity2: '湿度2',
-    rssi: '信号强度',
+    battery: '电池电压 (V)',
+    voltage: '电压 (V)',
+    temperature: '温度 (°C)',
+    temp: '温度 (°C)',
+    humidity: '湿度 (%)',
+    humidity2: '湿度2 (%)',
+    rssi: '信号强度 (dBm)',
     adc: 'ADC值',
     gpio: 'GPIO状态',
     relay: '继电器',
     state: '状态',
     uptime: '运行时间',
-    version: '版本',
+    version: '固件版本',
     ip: 'IP地址',
-    free_heap: '内存',
+    free_heap: '空闲内存 (KB)',
     reset_reason: '重启原因'
   }
   return labels[key] || key
+}
+
+// 格式化原始数据的值
+const formatRawValue = (value, key) => {
+  if (value === null || value === undefined) return '-'
+  if (key === 'uptime') return formatUptime(value)
+  if (key === 'free_heap') return formatMemory(value)
+  if (typeof value === 'number') return value.toFixed(2)
+  return value
+}
+
+// 格式化运行时间（秒转为天:时:分:秒）
+const formatUptime = (seconds) => {
+  if (!seconds || isNaN(seconds)) return '-'
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  if (days > 0) {
+    return `${days}天 ${hours}小时 ${mins}分`
+  } else if (hours > 0) {
+    return `${hours}小时 ${mins}分 ${secs}秒`
+  } else if (mins > 0) {
+    return `${mins}分 ${secs}秒`
+  }
+  return `${secs}秒`
+}
+
+// 格式化内存（字节转为KB）
+const formatMemory = (bytes) => {
+  if (!bytes || isNaN(bytes)) return '-'
+  const kb = bytes / 1024
+  return `${kb.toFixed(1)} KB`
 }
 
 // OTA状态
@@ -578,40 +711,54 @@ onMounted(() => {
   fetchDevice()
   fetchFirmwares()
   fetchChartData()  // 获取图表数据
+  fetchLatestData()  // 获取最新实时数据
   wsStore.subscribeDevice(deviceId)
   window.addEventListener('resize', handleResize)
-  
-  // 监听WebSocket的OTA消息
-  const unwatch = wsStore.$subscribe((mutation, state) => {
-    // OTA进度
-    if (state.lastMessage?.type === 'ota_progress' && state.lastMessage.deviceId === deviceId) {
-      const targetProgress = state.lastMessage.progress
-      // 平滑动画：从当前进度逐步增加到目标进度
-      animateProgress(targetProgress)
-      // 根据进度估算步骤
-      if (targetProgress < 30) {
-        otaStatus.value.step = 3 // 下载固件
-      } else if (targetProgress < 100) {
-        otaStatus.value.step = 4 // 写入Flash
+
+  // 监听 deviceData 变化，更新系统信息
+  watch(() => wsStore.deviceData, (newData) => {
+    const wsData = newData.get(deviceId)
+    if (wsData) {
+      const info = {}
+      SYSTEM_FIELDS.forEach(field => {
+        if (wsData[field] !== undefined) {
+          info[field] = wsData[field]
+        }
+      })
+      if (Object.keys(info).length > 0) {
+        realtimeSystemInfo.value = info
       }
     }
-    // OTA完成
-    if (state.lastMessage?.type === 'ota_complete' && state.lastMessage.deviceId === deviceId) {
-      otaStatus.value.step = 5
-      otaStatus.value.progress = 100
-      otaStatus.value.result = 'success'
-      ElMessage.success(`固件升级完成! 新版本: ${state.lastMessage.version}`)
-      // 刷新设备信息和升级历史
-      setTimeout(() => {
-        fetchDevice()
-        fetchOTAHistory()
-      }, 5000) // 等待设备重启后刷新
-    }
-    // OTA错误
-    if (state.lastMessage?.type === 'ota_error' && state.lastMessage.deviceId === deviceId) {
-      otaStatus.value.result = 'failed'
-      otaStatus.value.error = state.lastMessage.error
-      ElMessage.error(`固件升级失败: ${state.lastMessage.error}`)
+  }, { deep: true })
+
+  // 监听 lastMessage 变化（OTA状态）
+  watch(() => wsStore.lastMessage, (msg) => {
+    if (!msg || msg.deviceId !== deviceId) return
+
+    switch (msg.type) {
+      case 'ota_progress':
+        animateProgress(msg.progress)
+        if (msg.progress < 30) {
+          otaStatus.value.step = 3
+        } else if (msg.progress < 100) {
+          otaStatus.value.step = 4
+        }
+        break
+      case 'ota_complete':
+        otaStatus.value.step = 5
+        otaStatus.value.progress = 100
+        otaStatus.value.result = 'success'
+        ElMessage.success(`固件升级完成! 新版本: ${msg.version}`)
+        setTimeout(() => {
+          fetchDevice()
+          fetchOTAHistory()
+        }, 5000)
+        break
+      case 'ota_error':
+        otaStatus.value.result = 'failed'
+        otaStatus.value.error = msg.error
+        ElMessage.error(`固件升级失败: ${msg.error}`)
+        break
     }
   })
 })
@@ -627,8 +774,57 @@ const fetchDevice = async () => {
   try {
     const res = await axios.get(`/api/devices/${deviceId}`)
     device.value = res.data
+
+    // 保存设备详情中的系统信息到缓存（IP、版本等）
+    const info = {}
+    if (res.data.ip) info.ip = res.data.ip
+    if (res.data.version) info.version = res.data.version
+    if (res.data.rssi) info.rssi = res.data.rssi
+    if (Object.keys(info).length > 0) {
+      cachedSystemInfo.value = { ...cachedSystemInfo.value, ...info }
+    }
   } catch (err) {
     ElMessage.error('获取设备信息失败')
+  }
+}
+
+// 获取最新实时数据（页面加载时立即显示）
+const fetchLatestData = async () => {
+  try {
+    const res = await axios.get(`/api/devices/${deviceId}/data`, {
+      params: { limit: 5 }
+    })
+
+    if (res.data && res.data.length > 0) {
+      const latest = res.data[0]
+      try {
+        const parsed = typeof latest.data_value === 'string'
+          ? JSON.parse(latest.data_value)
+          : latest.data_value
+
+        // 添加缓存时间标记
+        parsed._cachedAt = new Date(latest.created_at).toLocaleString('zh-CN')
+
+        // 保存传感器数据到缓存
+        cachedData.value = parsed
+        lastUpdateTime.value = parsed._cachedAt
+
+        // 保存系统信息到缓存（如果有）
+        const sysInfo = {}
+        SYSTEM_FIELDS.forEach(field => {
+          if (parsed[field] !== undefined) {
+            sysInfo[field] = parsed[field]
+          }
+        })
+        if (Object.keys(sysInfo).length > 0) {
+          cachedSystemInfo.value = { ...cachedSystemInfo.value, ...sysInfo }
+        }
+      } catch (e) {
+        console.error('解析数据失败:', e)
+      }
+    }
+  } catch (err) {
+    console.error('获取最新数据失败:', err)
   }
 }
 
@@ -795,7 +991,8 @@ const startOTA = async () => {
 // 重试升级
 const retryOTA = () => {
   resetOTA()
-  // 重新选择之前选中的固件
+  // 重置后自动触发 startOTA
+  startOTA()
 }
 
 // 重置OTA状态
@@ -870,6 +1067,22 @@ const sendCmd = async (cmd) => {
   border-radius: 8px;
 }
 
+.data-item.small {
+  padding: 12px;
+}
+
+.data-item.small .data-value {
+  font-size: 16px;
+}
+
+.data-item.small .data-label {
+  font-size: 12px;
+}
+
+.system-info-section {
+  margin-top: 10px;
+}
+
 .data-value {
   font-size: 32px;
   font-weight: bold;
@@ -896,7 +1109,7 @@ const sendCmd = async (cmd) => {
   font-size: 12px;
 }
 
-.raw-json {
+.raw-table {
   width: 100%;
   margin-top: 10px;
   padding: 12px;
@@ -905,9 +1118,28 @@ const sendCmd = async (cmd) => {
   overflow-x: auto;
 }
 
-.raw-json code {
-  font-size: 12px;
-  color: #606266;
+.raw-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.raw-table th,
+.raw-table td {
+  padding: 6px 12px;
+  text-align: left;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.raw-table th {
+  color: #909399;
+  font-weight: normal;
+  width: 40%;
+}
+
+.raw-table td:last-child {
+  color: #303133;
+  font-family: monospace;
 }
 
 /* OTA 升级卡片样式 */

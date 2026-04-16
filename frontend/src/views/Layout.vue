@@ -23,17 +23,25 @@
           <template #title>首页</template>
         </el-menu-item>
         
-        <!-- 设备管理菜单 -->
-        <el-menu-item v-if="menuPerms.device" index="/devices">
-          <el-icon><Cpu /></el-icon>
-          <template #title>设备管理</template>
-        </el-menu-item>
-        
-        <!-- 固件管理菜单 -->
-        <el-menu-item v-if="menuPerms.device" index="/firmware">
-          <el-icon><Upload /></el-icon>
-          <template #title>固件管理</template>
-        </el-menu-item>
+        <!-- 设备管理子菜单 -->
+        <el-sub-menu v-if="menuPerms.device" index="/device-menu">
+          <template #title>
+            <el-icon><Cpu /></el-icon>
+            <span>设备管理</span>
+          </template>
+          <el-menu-item index="/devices">
+            <el-icon><Monitor /></el-icon>
+            <span>设备列表</span>
+          </el-menu-item>
+          <el-menu-item index="/groups">
+            <el-icon><Folder /></el-icon>
+            <span>设备分组</span>
+          </el-menu-item>
+          <el-menu-item index="/firmware">
+            <el-icon><Upload /></el-icon>
+            <span>固件管理</span>
+          </el-menu-item>
+        </el-sub-menu>
         
         <!-- 蓝牙配网页面 -->
         <el-menu-item v-if="menuPerms.bluetooth" index="/bluetooth">
@@ -83,10 +91,10 @@
             <el-icon><Connection /></el-icon>
             <span>数据库配置</span>
           </el-menu-item>
-          <!-- 日志报表 - 仅管理员可见 -->
-          <el-menu-item v-if="userStore.isAdmin" index="/logs">
+          <!-- 操作日志 - 仅管理员可见 -->
+          <el-menu-item v-if="menuPerms.settings" index="/logs">
             <el-icon><Document /></el-icon>
-            <span>日志报表</span>
+            <span>操作日志</span>
           </el-menu-item>
         </el-sub-menu>
       </el-menu>

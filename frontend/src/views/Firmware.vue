@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span><el-icon><Files /></el-icon> 固件管理</span>
-          <el-button type="primary" @click="showUploadDialog = true">
+          <el-button v-if="btnPerms.upload" type="primary" @click="showUploadDialog = true">
             <el-icon><Upload /></el-icon> 上传固件
           </el-button>
         </div>
@@ -29,10 +29,10 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="downloadFirmware(row)">
+            <el-button v-if="btnPerms.download" type="primary" size="small" @click="downloadFirmware(row)">
               <el-icon><Download /></el-icon> 下载
             </el-button>
-            <el-button type="danger" size="small" @click="deleteFirmware(row)">
+            <el-button v-if="btnPerms.delete" type="danger" size="small" @click="deleteFirmware(row)">
               <el-icon><Delete /></el-icon> 删除
             </el-button>
           </template>
@@ -40,7 +40,7 @@
       </el-table>
       
       <el-empty v-if="!loading && firmwares.length === 0" description="暂无固件">
-        <el-button type="primary" @click="showUploadDialog = true">上传固件</el-button>
+        <el-button v-if="btnPerms.upload" type="primary" @click="showUploadDialog = true">上传固件</el-button>
       </el-empty>
     </el-card>
     
@@ -129,6 +129,10 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Files, Upload, Download, Delete, UploadFilled } from '@element-plus/icons-vue'
 import axios from 'axios'
+import { useUserStore } from '../stores/user'
+
+const userStore = useUserStore()
+const btnPerms = computed(() => userStore.getButtonPermissions('firmware'))
 
 const firmwares = ref([])
 const loading = ref(false)

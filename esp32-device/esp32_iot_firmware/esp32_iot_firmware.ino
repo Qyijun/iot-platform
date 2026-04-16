@@ -1,6 +1,6 @@
 /**
- * ESP32 物联网设备固件
- * 支持: MQTT通信、蓝牙配网、OTA升级
+ * ESP32 IoT 物联网设备固件 (精简版)
+ * 支持: MQTT通信、OTA升级、心跳灯
  * 
  * 使用Arduino IDE烧录:
  * 1. 文件 -> 首选项 -> 附加开发板管理器URL:
@@ -9,42 +9,50 @@
  * 3. 工具 -> 端口 -> 选择COM口
  * 4. 复制本文件内容到Arduino IDE编译上传
  * 
- * 库依赖 (项目 -> 加载库 -> 管理库):
+ * 库依赖:
  * - PubSubClient (by Nick O'Leary)
  * - ArduinoJson (by Benoit Blanchon)
- * - NimBLE-Arduino (by H2zero)
+ * - Update (内置)
+ * - HTTPClient (内置)
  */
 
 // ========== 设备配置 (修改这里) ==========
-#define DEVICE_TYPE "sensor"        // 设备类型: sensor, switch, relay, gateway, custom
-#define DEVICE_ID "device_001"       // 设备唯一ID (每个设备必须唯一)
-#define FIRMWARE_VERSION "1.0.0"     // 固件版本
+#define DEVICE_TYPE "sensor"
+#define DEVICE_ID "device_001"
+#define FIRMWARE_VERSION "2.0.1"
 
-// ========== WiFi配置 (可通过蓝牙配网修改) ==========
+// ========== WiFi配置 (手动修改) ==========
 char WIFI_SSID[32] = "qiuyijun";
 char WIFI_PASSWORD[64] = "Qiuyijun123";
 
 // ========== MQTT服务器配置 ==========
-#define MQTT_SERVER "192.168.1.3"  // 修改为你的服务器IP
+#define MQTT_SERVER "192.168.1.3"
 #define MQTT_PORT 1883
-#define MQTT_USER "qiuyijun"                  // MQTT用户名(可选)
-#define MQTT_PASS "Qiuyijun.13825401705"                  // MQTT密码(可选)
-
-// ========== 蓝牙配网服务UUID ==========
-#define BLE_SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define BLE_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define MQTT_USER "qiuyijun"
+#define MQTT_PASS "Qiuyijun.13825401705"
 
 // ========== 引脚定义 ==========
-#define LED_PIN 2          // 板载LED
-#define RELAY_PIN 4        // 继电器控制
-#define BUTTON_PIN 0       // 配网按钮
-#define SENSOR_PIN 5       // 传感器引脚
+#define LED_PIN 2              // 板载LED（可被命令控制 + 心跳灯）
+#define RELAY_PIN 4            // 继电器控制
+#define BUTTON_PIN 0           // 配网按钮
+#define USE_BOARD_LED          // 启用板载LED作为心跳灯（注释此行则使用GPIO5外接LED）
+
+#ifndef USE_BOARD_LED
+#define HEARTBEAT_LED_PIN 5   // 如果不用板载LED，需要外接LED到GPIO5
+#endif
+
+// ========== 时间间隔配置 (毫秒) ==========
+#define WIFI_RECONNECT_INTERVAL 5000
+#define MQTT_RECONNECT_INTERVAL 5000
+#define HEARTBEAT_INTERVAL 30000
+#define TELEMETRY_INTERVAL 10000
+#define WIFI_CONNECT_TIMEOUT 15000
+#define HEARTBEAT_FLASH_DURATION 100
 
 // ========== 库引入 ==========
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <NimBLEDevice.h>
 #include <Update.h>
 #include <HTTPClient.h>
 
@@ -52,17 +60,11 @@ char WIFI_PASSWORD[64] = "Qiuyijun123";
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
-// 蓝牙
-NimBLEServer* bleServer = nullptr;
-NimBLECharacteristic* bleCharacteristic = nullptr;
-bool bleConnected = false;
-
 // OTA状态
 bool otaInProgress = false;
 size_t otaTotalSize = 0;
 size_t otaDownloaded = 0;
-String otaVersion = "";
-unsigned long otaStartTime = 0;
+char otaVersion[32] = "";
 
 // 设备状态
 struct DeviceState {
@@ -74,220 +76,42 @@ struct DeviceState {
     bool ledState;
 } deviceState = {false, 0, 0, 0, 0, false};
 
+// WiFi状态
+bool wifiConnecting = false;
+uint32_t wifiConnectStart = 0;
+
+// 心跳灯状态
+bool heartbeatLedActive = false;
+uint32_t heartbeatLedFlashStart = 0;
+
 // 时间记录
-unsigned long lastHeartbeat = 0;
-unsigned long lastDataPublish = 0;
-unsigned long bootTime = 0;
-bool provisioned = true;  // 已配置WiFi
+uint32_t lastWifiReconnect = 0;
+uint32_t lastMqttReconnect = 0;
+uint32_t lastHeartbeat = 0;
+uint32_t lastDataPublish = 0;
+uint32_t bootTime = 0;
+bool mqttFirstConnected = false;
 
-// ========== 蓝牙回调 ==========
-class BLEServerCallbacks: public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer) {
-        bleConnected = true;
-        Serial.println("[BLE] 客户端已连接");
-    }
-    void onDisconnect(NimBLEServer* pServer) {
-        bleConnected = false;
-        Serial.println("[BLE] 客户端已断开");
-        NimBLEDevice::startAdvertising();
-    }
-};
-
-class BLECharacteristicCallbacks: public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic) {
-        String value = pCharacteristic->getValue().c_str();
-        Serial.printf("[BLE] 收到数据: %s\n", value.c_str());
-        
-        // 解析配网数据 JSON: {"ssid":"xxx","password":"xxx"}
-        StaticJsonDocument<256> doc;
-        DeserializationError error = deserializeJson(doc, value);
-        
-        if (!error && doc.containsKey("ssid") && doc.containsKey("password")) {
-            String newSsid = doc["ssid"].as<String>();
-            String newPassword = doc["password"].as<String>();
-            
-            newSsid.toCharArray(WIFI_SSID, 32);
-            newPassword.toCharArray(WIFI_PASSWORD, 64);
-            
-            Serial.printf("[BLE] WiFi已更新: %s\n", WIFI_SSID);
-            
-            // 保存到Flash
-            saveConfig();
-            
-            // 回复成功
-            pCharacteristic->setValue("OK");
-            delay(100);
-            
-            Serial.println("[BLE] 设备将在3秒后重启...");
-            delay(3000);
-            ESP.restart();
-        }
-    }
-};
-
-// ========== WiFi连接 ==========
-void setupWiFi() {
-    Serial.println();
-    Serial.println("╔══════════════════════════════════════════╗");
-    Serial.println("║         ESP32 IoT 设备启动               ║");
-    Serial.println("╚══════════════════════════════════════════╝");
-    Serial.printf("设备ID: %s\n", DEVICE_ID);
-    Serial.printf("设备类型: %s\n", DEVICE_TYPE);
-    Serial.printf("固件版本: %s\n", FIRMWARE_VERSION);
-    Serial.printf("芯片型号: %s\n", ESP.getChipModel());
-    Serial.printf("芯片版本: %d\n", ESP.getChipRevision());
-    Serial.printf("CPU频率: %d MHz\n", ESP.getCpuFreqMHz());
-    Serial.printf("Flash大小: %d KB\n", ESP.getFlashChipSize() / 1024);
-    Serial.printf("可用内存: %d KB\n", ESP.getFreeHeap() / 1024);
-    Serial.println();
-    
-    // 检查是否已配置WiFi
-    if (strlen(WIFI_SSID) == 0 || String(WIFI_SSID) == "YOUR_WIFI_SSID") {
-        Serial.println("[WiFi] 未配置WiFi，进入配网模式...");
-        provisioned = false;
-        startBLEProvisioning();
-    } else {
-        Serial.printf("[WiFi] 已配置WiFi: %s\n", WIFI_SSID);
-        connectWiFi();
-    }
-}
-
-void connectWiFi() {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    
-    Serial.print("[WiFi] 正在连接");
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-        delay(500);
-        Serial.print(".");
-        attempts++;
+// ========== MQTT消息处理 ==========
+void handleMQTTMessage(char* topic, uint8_t* payload, unsigned int length) {
+    char msg[256] = {0};
+    if (length < sizeof(msg) - 1) {
+        memcpy(msg, payload, length);
+        msg[length] = '\0';
     }
     
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println();
-        Serial.printf("[WiFi] 连接成功!\n");
-        Serial.printf("       IP: %s\n", WiFi.localIP().toString().c_str());
-        Serial.printf("       信号: %d dBm\n", WiFi.RSSI());
-        provisioned = true;
-    } else {
-        Serial.println();
-        Serial.println("[WiFi] 连接失败!");
-        provisioned = false;
-    }
-}
-
-void reconnectWiFi() {
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[WiFi] WiFi断开，重新连接...");
-        connectWiFi();
-    }
-}
-
-// ========== 蓝牙配网 ==========
-void startBLEProvisioning() {
-    Serial.println();
-    Serial.println("╔══════════════════════════════════════════╗");
-    Serial.println("║         进入蓝牙配网模式                 ║");
-    Serial.println("╚══════════════════════════════════════════╝");
-    Serial.println("请使用手机APP连接蓝牙并配置WiFi");
-    Serial.printf("蓝牙名称: %s\n", DEVICE_ID);
-    Serial.printf("蓝牙UUID: %s\n", BLE_SERVICE_UUID);
-    Serial.println();
+    Serial.printf("[MQTT] 收到: %s -> %s\n", topic, msg);
     
-    NimBLEDevice::init(DEVICE_ID);
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // 最大功率
-    
-    bleServer = NimBLEDevice::createServer();
-    bleServer->setCallbacks(new BLEServerCallbacks());
-    
-    NimBLEService* service = bleServer->createService(BLE_SERVICE_UUID);
-    
-    bleCharacteristic = service->createCharacteristic(
-        BLE_CHARACTERISTIC_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY
-    );
-    bleCharacteristic->setCallbacks(new BLECharacteristicCallbacks());
-    bleCharacteristic->setValue("WAITING_CONFIG");
-    
-    service->start();
-    
-    NimBLEAdvertising* advertising = NimBLEDevice::getAdvertising();
-    advertising->addServiceUUID(BLE_SERVICE_UUID);
-    advertising->setName(DEVICE_ID);
-    advertising->start();
-    
-    Serial.println("[BLE] 蓝牙广播已启动，等待连接...");
-    
-    // LED快闪
-    while (!provisioned) {
-        digitalWrite(LED_PIN, HIGH);
-        delay(100);
-        digitalWrite(LED_PIN, LOW);
-        delay(100);
-        
-        // 处理蓝牙连接
-        delay(100);
-    }
-}
-
-// ========== MQTT ==========
-void setupMQTT() {
-    mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
-    mqttClient.setCallback(handleMQTTMessage);
-    connectMQTT();
-}
-
-void connectMQTT() {
-    while (!mqttClient.connected()) {
-        Serial.print("[MQTT] 正在连接");
-        String clientId = "ESP32-" + String(DEVICE_ID);
-        
-        if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
-            Serial.println(" 成功!");
-            
-            // 订阅命令主题
-            String cmdTopic = "device/" + String(DEVICE_ID) + "/command";
-            mqttClient.subscribe(cmdTopic.c_str());
-            Serial.printf("[MQTT] 订阅: %s\n", cmdTopic.c_str());
-            
-            // 订阅OTA主题
-            String otaTopic = "device/" + String(DEVICE_ID) + "/ota";
-            mqttClient.subscribe(otaTopic.c_str());
-            Serial.printf("[MQTT] 订阅: %s\n", otaTopic.c_str());
-            
-            // 发布上线消息
-            publishStatus();
-        } else {
-            Serial.print(" 失败, rc=");
-            Serial.print(mqttClient.state());
-            Serial.println(" 5秒后重试...");
-            delay(5000);
-        }
-    }
-}
-
-void handleMQTTMessage(char* topic, byte* payload, unsigned int length) {
-    // 解析命令
     StaticJsonDocument<256> doc;
-    DeserializationError error = deserializeJson(doc, payload);
+    DeserializationError error = deserializeJson(doc, msg);
+    if (error) return;
     
-    if (error) {
-        Serial.printf("[MQTT] JSON解析失败: %s\n", error.c_str());
-        return;
-    }
+    const char* cmd = doc["command"];
+    if (!cmd) return;
     
-    const char* cmd = doc["command"] | doc["cmd"] | "";
-    Serial.printf("[MQTT] 命令: %s\n", cmd);
+    Serial.printf("[CMD] %s\n", cmd);
     
-    // ========== 命令处理 ==========
-    
-    // 获取状态
-    if (strcmp(cmd, "get_status") == 0 || strcmp(cmd, "status") == 0) {
-        publishStatus();
-    }
-    // 继电器控制
-    else if (strcmp(cmd, "relay_on") == 0) {
+    if (strcmp(cmd, "relay_on") == 0) {
         digitalWrite(RELAY_PIN, HIGH);
         deviceState.relayState = true;
         publishStatus();
@@ -297,12 +121,6 @@ void handleMQTTMessage(char* topic, byte* payload, unsigned int length) {
         deviceState.relayState = false;
         publishStatus();
     }
-    else if (strcmp(cmd, "relay_toggle") == 0) {
-        deviceState.relayState = !deviceState.relayState;
-        digitalWrite(RELAY_PIN, deviceState.relayState ? HIGH : LOW);
-        publishStatus();
-    }
-    // LED控制
     else if (strcmp(cmd, "led_on") == 0) {
         digitalWrite(LED_PIN, HIGH);
         deviceState.ledState = true;
@@ -311,31 +129,9 @@ void handleMQTTMessage(char* topic, byte* payload, unsigned int length) {
         digitalWrite(LED_PIN, LOW);
         deviceState.ledState = false;
     }
-    else if (strcmp(cmd, "led_toggle") == 0) {
-        deviceState.ledState = !deviceState.ledState;
-        digitalWrite(LED_PIN, deviceState.ledState ? HIGH : LOW);
-    }
-    // 获取设备信息
     else if (strcmp(cmd, "get_info") == 0) {
-        StaticJsonDocument<512> info;
-        info["device_id"] = DEVICE_ID;
-        info["device_type"] = DEVICE_TYPE;
-        info["firmware"] = FIRMWARE_VERSION;
-        info["chip_model"] = ESP.getChipModel();
-        info["chip_revision"] = ESP.getChipRevision();
-        info["cpu_freq"] = ESP.getCpuFreqMHz();
-        info["flash_size"] = ESP.getFlashChipSize();
-        info["free_heap"] = ESP.getFreeHeap();
-        info["ip"] = WiFi.localIP().toString();
-        info["rssi"] = WiFi.RSSI();
-        info["uptime"] = millis() / 1000;
-        
-        char respBuffer[512];
-        serializeJson(info, respBuffer);
-        String topic = "device/" + String(DEVICE_ID) + "/info";
-        mqttClient.publish(topic.c_str(), respBuffer);
+        publishDeviceInfo();
     }
-    // OTA固件升级
     else if (strcmp(cmd, "ota_update") == 0) {
         if (doc.containsKey("url")) {
             const char* url = doc["url"];
@@ -343,16 +139,6 @@ void handleMQTTMessage(char* topic, byte* payload, unsigned int length) {
             Serial.printf("[OTA] 收到升级请求: %s -> v%s\n", url, version);
             startOTAUpdate(url, version);
         }
-    }
-    // 重启设备
-    else if (strcmp(cmd, "reboot") == 0 || strcmp(cmd, "restart") == 0) {
-        Serial.println("[CMD] 收到重启命令，3秒后重启...");
-        delay(3000);
-        ESP.restart();
-    }
-    // 未知命令
-    else {
-        Serial.printf("[CMD] 未知命令: %s\n", cmd);
     }
 }
 
@@ -370,20 +156,46 @@ void publishStatus() {
     char buffer[256];
     serializeJson(doc, buffer);
     
-    String topic = "device/" + String(DEVICE_ID) + "/status";
-    mqttClient.publish(topic.c_str(), buffer);
+    char topic[64];
+    snprintf(topic, sizeof(topic), "device/%s/status", DEVICE_ID);
+    mqttClient.publish(topic, buffer);
     
-    Serial.printf("[MQTT] 发布状态: %s\n", buffer);
+    Serial.printf("[MQTT] 发布状态(上线): %s\n", buffer);
+}
+
+void publishHeartbeat() {
+    // 读取电池电压（如果有 ADC 连接）
+    float voltage = 3.3 + random(0, 500) / 1000.0;  // 模拟电压 3.3-3.8V
+    
+    StaticJsonDocument<256> doc;
+    doc["device_id"] = DEVICE_ID;
+    doc["type"] = DEVICE_TYPE;
+    doc["version"] = FIRMWARE_VERSION;
+    doc["rssi"] = WiFi.RSSI();
+    doc["ip"] = WiFi.localIP().toString();
+    doc["voltage"] = voltage;      // 电压(V)
+    doc["uptime"] = millis() / 1000;
+    doc["free_heap"] = ESP.getFreeHeap();
+    
+    char buffer[256];
+    serializeJson(doc, buffer);
+    
+    char topic[64];
+    snprintf(topic, sizeof(topic), "device/%s/heartbeat", DEVICE_ID);
+    mqttClient.publish(topic, buffer);
+    
+    Serial.printf("[MQTT] 心跳: RSSI=%d, voltage=%.2fV, uptime=%lus\n", WiFi.RSSI(), voltage, millis() / 1000);
+    
+    triggerHeartbeatLed();
 }
 
 void publishTelemetry() {
     StaticJsonDocument<256> doc;
     doc["device_id"] = DEVICE_ID;
     
-    // 模拟传感器数据 (实际使用时替换为真实传感器读取)
-    deviceState.temperature = random(200, 300) / 10.0;  // 20.0-30.0°C
-    deviceState.humidity = random(400, 700) / 10.0;   // 40.0-70.0%
-    deviceState.batteryVoltage = 3.3 + random(0, 500) / 1000.0;  // 3.3-3.8V
+    deviceState.temperature = random(200, 300) / 10.0;
+    deviceState.humidity = random(400, 700) / 10.0;
+    deviceState.batteryVoltage = 3.3 + random(0, 500) / 1000.0;
     
     doc["temperature"] = deviceState.temperature;
     doc["humidity"] = deviceState.humidity;
@@ -394,11 +206,64 @@ void publishTelemetry() {
     char buffer[256];
     serializeJson(doc, buffer);
     
-    String topic = "device/" + String(DEVICE_ID) + "/telemetry";
-    mqttClient.publish(topic.c_str(), buffer);
+    char topic[64];
+    snprintf(topic, sizeof(topic), "device/%s/telemetry", DEVICE_ID);
+    mqttClient.publish(topic, buffer);
     
-    Serial.printf("[MQTT] 发布遥测: %.1f°C %.1f%% %.2fV\n", 
+    Serial.printf("[MQTT] 遥测: %.1f°C %.1f%% %.2fV\n", 
         deviceState.temperature, deviceState.humidity, deviceState.batteryVoltage);
+}
+
+void publishDeviceInfo() {
+    StaticJsonDocument<512> info;
+    info["device_id"] = DEVICE_ID;
+    info["device_type"] = DEVICE_TYPE;
+    info["firmware"] = FIRMWARE_VERSION;
+    info["chip_model"] = ESP.getChipModel();
+    info["chip_revision"] = ESP.getChipRevision();
+    info["cpu_freq"] = ESP.getCpuFreqMHz();
+    info["flash_size"] = ESP.getFlashChipSize();
+    info["free_heap"] = ESP.getFreeHeap();
+    info["ip"] = WiFi.localIP().toString();
+    info["rssi"] = WiFi.RSSI();
+    info["uptime"] = millis() / 1000;
+    
+    char respBuffer[512];
+    serializeJson(info, respBuffer);
+    
+    char topic[64];
+    snprintf(topic, sizeof(topic), "device/%s/info", DEVICE_ID);
+    mqttClient.publish(topic, respBuffer);
+}
+
+void publishOTAProgress(int percent) {
+    StaticJsonDocument<128> doc;
+    doc["device_id"] = DEVICE_ID;
+    doc["progress"] = percent;
+    doc["downloaded"] = otaDownloaded;
+    doc["total"] = otaTotalSize;
+    
+    char buffer[128];
+    serializeJson(doc, buffer);
+    
+    char topic[64];
+    snprintf(topic, sizeof(topic), "device/%s/ota", DEVICE_ID);
+    mqttClient.publish(topic, buffer);
+}
+
+void publishOTAComplete(bool success, const char* error) {
+    StaticJsonDocument<256> doc;
+    doc["device_id"] = DEVICE_ID;
+    doc["success"] = success;
+    doc["version"] = otaVersion;
+    if (error) doc["error"] = error;
+    
+    char buffer[256];
+    serializeJson(doc, buffer);
+    
+    char topic[64];
+    snprintf(topic, sizeof(topic), "device/%s/ota", DEVICE_ID);
+    mqttClient.publish(topic, buffer);
 }
 
 // ========== OTA升级 ==========
@@ -410,10 +275,8 @@ void startOTAUpdate(const char* url, const char* version) {
     otaInProgress = true;
     otaTotalSize = 0;
     otaDownloaded = 0;
-    otaVersion = version;
-    otaStartTime = millis();
+    strncpy(otaVersion, version, sizeof(otaVersion) - 1);
     
-    // 闪烁LED表示正在升级
     publishOTAProgress(0);
     
     HTTPClient http;
@@ -441,7 +304,6 @@ void startOTAUpdate(const char* url, const char* version) {
     
     Serial.printf("[OTA] 固件大小: %d bytes\n", contentLength);
     
-    // 检查Flash空间
     if (!Update.begin(contentLength)) {
         Serial.println("[OTA] Flash空间不足");
         publishOTAComplete(false, "Insufficient flash space");
@@ -450,7 +312,6 @@ void startOTAUpdate(const char* url, const char* version) {
         return;
     }
     
-    // 透传下载并写入
     WiFiClient* stream = http.getStreamPtr();
     size_t written = 0;
     int lastPercent = 0;
@@ -474,12 +335,11 @@ void startOTAUpdate(const char* url, const char* version) {
     }
     
     http.end();
-    
     Serial.printf("[OTA] 下载完成: %d bytes\n", written);
     
     if (Update.end(true)) {
         Serial.println("[OTA] 固件写入完成!");
-        publishOTAComplete(true);
+        publishOTAComplete(true, "success");
         Serial.println("[OTA] 设备将在3秒后重启...");
         delay(3000);
         ESP.restart();
@@ -490,67 +350,145 @@ void startOTAUpdate(const char* url, const char* version) {
     }
 }
 
-void publishOTAProgress(int percent) {
-    StaticJsonDocument<64> doc;
-    doc["progress"] = percent;
-    doc["version"] = otaVersion;
-    
-    char payload[64];
-    serializeJson(doc, payload);
-    
-    String topic = "device/" + String(DEVICE_ID) + "/ota/progress";
-    mqttClient.publish(topic.c_str(), payload);
+// ========== 心跳灯控制 ==========
+void triggerHeartbeatLed() {
+    // 板载LED是低电平亮（有些板子是反的）
+    #if defined(USE_BOARD_LED)
+    digitalWrite(LED_PIN, LOW);  // 低电平亮
+    heartbeatLedActive = true;
+    heartbeatLedFlashStart = millis();
+    #endif
 }
 
-void publishOTAComplete(bool success, const char* error) {
-    StaticJsonDocument<128> doc;
-    doc["status"] = success ? "complete" : "error";
-    doc["version"] = otaVersion;
-    doc["current_version"] = FIRMWARE_VERSION;
-    if (error) doc["error"] = error;
+void updateHeartbeatLed() {
+    #if defined(USE_BOARD_LED)
+    if (!heartbeatLedActive) return;
     
-    char payload[128];
-    serializeJson(doc, payload);
-    
-    String topic = "device/" + String(DEVICE_ID) + "/ota/result";
-    mqttClient.publish(topic.c_str(), payload);
-    
-    otaInProgress = false;
+    uint32_t now = millis();
+    if (now - heartbeatLedFlashStart >= HEARTBEAT_FLASH_DURATION) {
+        digitalWrite(LED_PIN, HIGH);  // 熄灭
+        heartbeatLedActive = false;
+    }
+    #endif
 }
 
-// ========== 配置存储 (简化版，实际用Preferences库更好) ==========
-void saveConfig() {
-    // 简化实现，实际建议使用Preferences库
-    Serial.println("[CONFIG] 配置已保存");
+// ========== 定时器辅助函数 ==========
+inline bool shouldRun(uint32_t interval, uint32_t& lastRun) {
+    uint32_t now = millis();
+    if (now - lastRun >= interval) {
+        lastRun = now;
+        return true;
+    }
+    return false;
 }
 
-void loadConfig() {
-    // 简化实现，实际建议使用Preferences库
-    Serial.println("[CONFIG] 加载默认配置");
+// ========== WiFi连接 (非阻塞) ==========
+void setupWiFi() {
+    Serial.println();
+    Serial.println("╔══════════════════════════════════════════╗");
+    Serial.println("║         ESP32 IoT 设备启动               ║");
+    Serial.println("╚══════════════════════════════════════════╝");
+    Serial.printf("设备ID: %s\n", DEVICE_ID);
+    Serial.printf("设备类型: %s\n", DEVICE_TYPE);
+    Serial.printf("固件版本: %s\n", FIRMWARE_VERSION);
+    Serial.printf("芯片型号: %s\n", ESP.getChipModel());
+    Serial.printf("芯片版本: %d\n", ESP.getChipRevision());
+    Serial.printf("CPU频率: %d MHz\n", ESP.getCpuFreqMHz());
+    Serial.printf("Flash大小: %d bytes\n", ESP.getFlashChipSize());
+    Serial.printf("可用内存: %d bytes\n", ESP.getFreeHeap());
+    Serial.println();
+    
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(false);
+    
+    Serial.printf("[WiFi] 正在连接: %s\n", WIFI_SSID);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    wifiConnecting = true;
+    wifiConnectStart = millis();
+}
+
+void connectWiFiNonBlocking() {
+    if (WiFi.status() == WL_CONNECTED) {
+        if (wifiConnecting) {
+            wifiConnecting = false;
+            Serial.printf("[WiFi] 已连接! IP: %s\n", WiFi.localIP().toString().c_str());
+            Serial.printf("[WiFi] 信号强度: %d dBm\n", WiFi.RSSI());
+        }
+        return;
+    }
+    
+    if (!wifiConnecting) {
+        Serial.printf("[WiFi] 正在重连: %s\n", WIFI_SSID);
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        wifiConnecting = true;
+        wifiConnectStart = millis();
+    }
+    
+    if (millis() - wifiConnectStart >= WIFI_CONNECT_TIMEOUT) {
+        Serial.println("[WiFi] 连接超时");
+        wifiConnecting = false;
+    }
+}
+
+// ========== MQTT连接 (非阻塞) ==========
+void setupMQTT() {
+    mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
+    mqttClient.setCallback(handleMQTTMessage);
+}
+
+void connectMQTTNonBlocking() {
+    static uint32_t lastAttempt = 0;
+    if (!shouldRun(MQTT_RECONNECT_INTERVAL, lastAttempt)) return;
+    
+    if (WiFi.status() != WL_CONNECTED) return;
+    
+    Serial.printf("[MQTT] 正在连接: %s:%d\n", MQTT_SERVER, MQTT_PORT);
+    
+    char clientId[64];
+    snprintf(clientId, sizeof(clientId), "ESP32-%s", DEVICE_ID);
+    
+    if (mqttClient.connect(clientId, MQTT_USER, MQTT_PASS)) {
+        Serial.println("[MQTT] 连接成功!");
+        
+        if (!mqttFirstConnected) {
+            publishStatus();
+            mqttFirstConnected = true;
+            Serial.println("[MQTT] 设备已上线");
+        }
+        
+        char cmdTopic[64];
+        snprintf(cmdTopic, sizeof(cmdTopic), "device/%s/command", DEVICE_ID);
+        mqttClient.subscribe(cmdTopic);
+        Serial.printf("[MQTT] 订阅: %s\n", cmdTopic);
+        
+        char otaTopic[64];
+        snprintf(otaTopic, sizeof(otaTopic), "device/%s/ota", DEVICE_ID);
+        mqttClient.subscribe(otaTopic);
+        Serial.printf("[MQTT] 订阅: %s\n", otaTopic);
+    } else {
+        Serial.printf("[MQTT] 连接失败, rc=%d\n", mqttClient.state());
+    }
 }
 
 // ========== 初始化 ==========
 void setup() {
-    // 串口
     Serial.begin(115200);
     
-    // 引脚
     pinMode(LED_PIN, OUTPUT);
     pinMode(RELAY_PIN, OUTPUT);
     pinMode(BUTTON_PIN, INPUT_PULLUP);
+    
+    #ifndef USE_BOARD_LED
+    pinMode(HEARTBEAT_LED_PIN, OUTPUT);
+    digitalWrite(HEARTBEAT_LED_PIN, LOW);
+    #endif
     
     digitalWrite(LED_PIN, LOW);
     digitalWrite(RELAY_PIN, LOW);
     
     bootTime = millis();
     
-    // 加载配置
-    loadConfig();
-    
-    // WiFi连接
     setupWiFi();
-    
-    // MQTT连接
     setupMQTT();
     
     Serial.println();
@@ -560,27 +498,29 @@ void setup() {
 }
 
 void loop() {
-    unsigned long now = millis();
+    updateHeartbeatLed();
     
-    // WiFi重连
-    reconnectWiFi();
+    connectWiFiNonBlocking();
     
-    // MQTT心跳和重连
+    if (WiFi.status() != WL_CONNECTED) {
+        delay(10);
+        return;
+    }
+    
     if (!mqttClient.connected()) {
-        connectMQTT();
-    }
-    mqttClient.loop();
-    
-    // 每30秒发送心跳
-    if (now - lastHeartbeat > 30000) {
-        publishStatus();
-        lastHeartbeat = now;
+        connectMQTTNonBlocking();
+    } else {
+        mqttClient.loop();
     }
     
-    // 每10秒发布遥测数据
-    if (now - lastDataPublish > 10000) {
-        publishTelemetry();
-        lastDataPublish = now;
+    if (!otaInProgress && mqttClient.connected()) {
+        if (shouldRun(HEARTBEAT_INTERVAL, lastHeartbeat)) {
+            publishHeartbeat();
+        }
+        
+        if (shouldRun(TELEMETRY_INTERVAL, lastDataPublish)) {
+            publishTelemetry();
+        }
     }
     
     delay(10);

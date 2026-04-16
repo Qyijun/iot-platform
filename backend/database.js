@@ -3,19 +3,32 @@ const fs = require('fs');
 
 // 系统权限定义
 const PERMISSIONS = {
-  // 菜单权限
-  MENU_DEVICE: 'menu:device',
-  MENU_BLUETOOTH: 'menu:bluetooth',
-  MENU_USER: 'menu:user',
-  MENU_ROLE: 'menu:role',
-  MENU_SETTINGS: 'menu:settings',
-
   // 设备权限
   DEVICE_VIEW: 'device:view',
   DEVICE_ADD: 'device:add',
   DEVICE_EDIT: 'device:edit',
   DEVICE_DELETE: 'device:delete',
   DEVICE_CONTROL: 'device:control',
+
+  // 分组权限
+  GROUP_VIEW: 'group:view',
+  GROUP_ADD: 'group:add',
+  GROUP_EDIT: 'group:edit',
+  GROUP_DELETE: 'group:delete',
+  GROUP_DEVICE_ADD: 'group:device:add',
+  GROUP_DEVICE_REMOVE: 'group:device:remove',
+  GROUP_DEVICE_MOVE: 'group:device:move',
+  GROUP_DEVICE_CLEAR: 'group:device:clear',
+
+  // 固件权限
+  FIRMWARE_VIEW: 'firmware:view',
+  FIRMWARE_UPLOAD: 'firmware:upload',
+  FIRMWARE_DOWNLOAD: 'firmware:download',
+  FIRMWARE_DELETE: 'firmware:delete',
+  FIRMWARE_UPGRADE: 'firmware:upgrade',
+
+  // 蓝牙配网
+  BLUETOOTH_VIEW: 'bluetooth:view',
 
   // 用户权限
   USER_VIEW: 'user:view',
@@ -30,6 +43,9 @@ const PERMISSIONS = {
   ROLE_EDIT: 'role:edit',
   ROLE_DELETE: 'role:delete',
   ROLE_PERMISSION: 'role:permission',
+
+  // 操作日志
+  LOG_VIEW: 'log:view',
 
   // 系统设置
   SYSTEM_VIEW: 'system:view',
@@ -51,19 +67,23 @@ const DEFAULT_ROLES = {
     name: '操作员',
     description: '设备操作人员',
     permissions: [
-      PERMISSIONS.MENU_DEVICE, PERMISSIONS.MENU_BLUETOOTH,
       PERMISSIONS.DEVICE_VIEW, PERMISSIONS.DEVICE_CONTROL,
+      PERMISSIONS.GROUP_VIEW, PERMISSIONS.GROUP_ADD, PERMISSIONS.GROUP_EDIT,
+      PERMISSIONS.GROUP_DEVICE_ADD, PERMISSIONS.GROUP_DEVICE_REMOVE, PERMISSIONS.GROUP_DEVICE_MOVE, PERMISSIONS.GROUP_DEVICE_CLEAR,
+      PERMISSIONS.FIRMWARE_VIEW, PERMISSIONS.FIRMWARE_UPLOAD, PERMISSIONS.FIRMWARE_DOWNLOAD, PERMISSIONS.FIRMWARE_DELETE, PERMISSIONS.FIRMWARE_UPGRADE,
+      PERMISSIONS.BLUETOOTH_VIEW,
       PERMISSIONS.USER_VIEW, PERMISSIONS.USER_ROLE,
       PERMISSIONS.ROLE_VIEW, PERMISSIONS.SYSTEM_VIEW,
-      PERMISSIONS.MENU_USER, PERMISSIONS.MENU_ROLE,
     ]
   },
   viewer: {
     name: '查看者',
     description: '仅可查看数据',
     permissions: [
-      PERMISSIONS.MENU_DEVICE, PERMISSIONS.DEVICE_VIEW,
-      PERMISSIONS.SYSTEM_VIEW, PERMISSIONS.MENU_SETTINGS,
+      PERMISSIONS.DEVICE_VIEW,
+      PERMISSIONS.GROUP_VIEW,
+      PERMISSIONS.FIRMWARE_VIEW,
+      PERMISSIONS.SYSTEM_VIEW,
     ]
   }
 };
@@ -343,6 +363,27 @@ class Database {
         started_at DATETIME DEFAULT ${dtNow},
         completed_at DATETIME
       )`,
+      
+      // 设备分组表
+      `CREATE TABLE IF NOT EXISTS device_groups (
+        id INTEGER PRIMARY KEY ${ai},
+        name VARCHAR(128) NOT NULL,
+        description TEXT,
+        icon VARCHAR(64) DEFAULT 'folder',
+        color VARCHAR(32) DEFAULT '#409EFF',
+        sort_order INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT ${dtNow},
+        updated_at DATETIME DEFAULT ${dtNow}
+      )`,
+      
+      // 设备分组关联表
+      `CREATE TABLE IF NOT EXISTS device_group_members (
+        id INTEGER PRIMARY KEY ${ai},
+        group_id INTEGER NOT NULL,
+        device_id VARCHAR(64) NOT NULL,
+        added_at DATETIME DEFAULT ${dtNow},
+        UNIQUE(group_id, device_id)
+      )`,
     ];
 
     for (const sql of tables) {
@@ -371,26 +412,44 @@ class Database {
 
     // 初始化权限
     const allPermissions = [
-      { code: PERMISSIONS.MENU_DEVICE, name: '设备管理菜单', category: '菜单权限' },
-      { code: PERMISSIONS.MENU_BLUETOOTH, name: '蓝牙配网页面', category: '菜单权限' },
-      { code: PERMISSIONS.MENU_USER, name: '用户管理菜单', category: '菜单权限' },
-      { code: PERMISSIONS.MENU_ROLE, name: '角色权限菜单', category: '菜单权限' },
-      { code: PERMISSIONS.MENU_SETTINGS, name: '系统设置菜单', category: '菜单权限' },
+      // 设备管理权限
       { code: PERMISSIONS.DEVICE_VIEW, name: '查看设备', category: '设备管理' },
       { code: PERMISSIONS.DEVICE_ADD, name: '添加设备', category: '设备管理' },
       { code: PERMISSIONS.DEVICE_EDIT, name: '编辑设备', category: '设备管理' },
       { code: PERMISSIONS.DEVICE_DELETE, name: '删除设备', category: '设备管理' },
       { code: PERMISSIONS.DEVICE_CONTROL, name: '控制设备', category: '设备管理' },
+      // 分组管理权限
+      { code: PERMISSIONS.GROUP_VIEW, name: '查看分组', category: '分组管理' },
+      { code: PERMISSIONS.GROUP_ADD, name: '创建分组', category: '分组管理' },
+      { code: PERMISSIONS.GROUP_EDIT, name: '编辑分组', category: '分组管理' },
+      { code: PERMISSIONS.GROUP_DELETE, name: '删除分组', category: '分组管理' },
+      { code: PERMISSIONS.GROUP_DEVICE_ADD, name: '添加设备到分组', category: '分组管理' },
+      { code: PERMISSIONS.GROUP_DEVICE_REMOVE, name: '从分组移除设备', category: '分组管理' },
+      { code: PERMISSIONS.GROUP_DEVICE_MOVE, name: '移动分组设备', category: '分组管理' },
+      { code: PERMISSIONS.GROUP_DEVICE_CLEAR, name: '清空分组设备', category: '分组管理' },
+      // 固件管理权限
+      { code: PERMISSIONS.FIRMWARE_VIEW, name: '查看固件', category: '固件管理' },
+      { code: PERMISSIONS.FIRMWARE_UPLOAD, name: '上传固件', category: '固件管理' },
+      { code: PERMISSIONS.FIRMWARE_DOWNLOAD, name: '下载固件', category: '固件管理' },
+      { code: PERMISSIONS.FIRMWARE_DELETE, name: '删除固件', category: '固件管理' },
+      { code: PERMISSIONS.FIRMWARE_UPGRADE, name: '批量升级', category: '固件管理' },
+      // 蓝牙配网权限
+      { code: PERMISSIONS.BLUETOOTH_VIEW, name: '使用蓝牙配网', category: '蓝牙配网' },
+      // 用户管理权限
       { code: PERMISSIONS.USER_VIEW, name: '查看用户', category: '用户管理' },
       { code: PERMISSIONS.USER_ADD, name: '添加用户', category: '用户管理' },
       { code: PERMISSIONS.USER_EDIT, name: '编辑用户', category: '用户管理' },
       { code: PERMISSIONS.USER_DELETE, name: '删除用户', category: '用户管理' },
       { code: PERMISSIONS.USER_ROLE, name: '分配角色', category: '用户管理' },
+      // 角色权限
       { code: PERMISSIONS.ROLE_VIEW, name: '查看角色', category: '角色权限' },
       { code: PERMISSIONS.ROLE_ADD, name: '创建角色', category: '角色权限' },
       { code: PERMISSIONS.ROLE_EDIT, name: '编辑角色', category: '角色权限' },
       { code: PERMISSIONS.ROLE_DELETE, name: '删除角色', category: '角色权限' },
       { code: PERMISSIONS.ROLE_PERMISSION, name: '分配权限', category: '角色权限' },
+      // 操作日志
+      { code: PERMISSIONS.LOG_VIEW, name: '查看操作日志', category: '系统设置' },
+      // 系统设置权限
       { code: PERMISSIONS.SYSTEM_VIEW, name: '查看系统', category: '系统设置' },
       { code: PERMISSIONS.SETTINGS_BASIC, name: '基本信息', category: '系统设置' },
       { code: PERMISSIONS.SETTINGS_NETWORK, name: '网络配置', category: '系统设置' },
@@ -905,6 +964,115 @@ class Database {
       // 密码不返回
     }
     return cfg;
+  }
+
+  // ============ 设备分组管理 ============
+  
+  async getAllGroups() {
+    return await this.all(`
+      SELECT g.id, g.name, g.description, g.icon, g.color,
+        COALESCE(g.sort_order, 0) as sort_order,
+        g.created_at, g.updated_at,
+        (SELECT COUNT(*) FROM device_group_members WHERE group_id = g.id) as device_count
+      FROM device_groups g
+      ORDER BY sort_order ASC, created_at ASC
+    `);
+  }
+  
+  async getGroupById(id) {
+    const rows = await this.all(`
+      SELECT g.*, 
+        (SELECT COUNT(*) FROM device_group_members WHERE group_id = g.id) as device_count
+      FROM device_groups g WHERE g.id = ?
+    `, [id]);
+    return rows[0];
+  }
+  
+  async createGroup(name, description, icon, color, sortOrder) {
+    const result = await this.run(
+      'INSERT INTO device_groups (name, description, icon, color, sort_order) VALUES (?, ?, ?, ?, ?)',
+      [name, description || '', icon || 'folder', color || '#409EFF', sortOrder || 0]
+    );
+    return result.lastInsertRowid;
+  }
+  
+  async updateGroup(id, name, description, icon, color, sortOrder) {
+    await this.run(
+      'UPDATE device_groups SET name = ?, description = ?, icon = ?, color = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [name, description, icon, color, sortOrder || 0, id]
+    );
+  }
+  
+  async deleteGroup(id) {
+    await this.run('DELETE FROM device_group_members WHERE group_id = ?', [id]);
+    await this.run('DELETE FROM device_groups WHERE id = ?', [id]);
+  }
+  
+  async addDeviceToGroup(groupId, deviceId) {
+    await this.run(
+      'INSERT OR IGNORE INTO device_group_members (group_id, device_id) VALUES (?, ?)',
+      [groupId, deviceId]
+    );
+  }
+  
+  async removeDeviceFromGroup(groupId, deviceId) {
+    await this.run(
+      'DELETE FROM device_group_members WHERE group_id = ? AND device_id = ?',
+      [groupId, deviceId]
+    );
+  }
+
+  async clearGroupDevices(groupId) {
+    await this.run(
+      'DELETE FROM device_group_members WHERE group_id = ?',
+      [groupId]
+    );
+  }
+
+  async moveDeviceToGroup(deviceId, fromGroupId, toGroupId) {
+    // 从原分组移除
+    await this.removeDeviceFromGroup(fromGroupId, deviceId);
+    // 添加到新分组
+    await this.addDeviceToGroup(toGroupId, deviceId);
+  }
+
+  async getDevicesByGroup(groupId) {
+    return await this.all(`
+      SELECT d.*, gm.added_at as group_added_at
+      FROM devices d
+      JOIN device_group_members gm ON d.device_id = gm.device_id
+      WHERE gm.group_id = ?
+      ORDER BY d.name
+    `, [groupId]);
+  }
+  
+  async getGroupsByDevice(deviceId) {
+    return await this.all(`
+      SELECT g.* FROM device_groups g
+      JOIN device_group_members gm ON g.id = gm.group_id
+      WHERE gm.device_id = ?
+    `, [deviceId]);
+  }
+  
+  async getDevicesWithGroups() {
+    const devices = await this.all(`
+      SELECT d.*, 
+        GROUP_CONCAT(g.id) as group_ids,
+        GROUP_CONCAT(g.name) as group_names
+      FROM devices d
+      LEFT JOIN device_group_members gm ON d.device_id = gm.device_id
+      LEFT JOIN device_groups g ON gm.group_id = g.id
+      GROUP BY d.id
+      ORDER BY d.created_at DESC
+    `);
+    
+    return devices.map(d => ({
+      ...d,
+      groups: d.group_ids ? d.group_ids.split(',').map((id, i) => ({
+        id: parseInt(id),
+        name: d.group_names.split(',')[i]
+      })) : []
+    }));
   }
 
   async testConnection(config) {

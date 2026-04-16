@@ -34,6 +34,12 @@ const routes = [
         meta: { title: '设备管理' }
       },
       {
+        path: 'groups',
+        name: 'DeviceGroups',
+        component: () => import('../views/DeviceGroups.vue'),
+        meta: { title: '设备分组' }
+      },
+      {
         path: 'devices/:id',
         name: 'DeviceDetail',
         component: () => import('../views/DeviceDetail.vue'),
@@ -64,12 +70,6 @@ const routes = [
         meta: { title: '角色权限' }
       },
       {
-        path: 'settings',
-        name: 'Settings',
-        component: () => import('../views/Settings.vue'),
-        meta: { title: '系统设置' }
-      },
-      {
         path: 'settings/basic',
         name: 'SettingsBasic',
         component: () => import('../views/settings/BasicInfo.vue'),
@@ -96,8 +96,8 @@ const routes = [
       {
         path: 'logs',
         name: 'Logs',
-        component: () => import('../views/Logs.vue'),
-        meta: { title: '日志报表' }
+        component: () => import('../views/OperationLogs.vue'),
+        meta: { title: '操作日志' }
       },
       {
         path: 'settings/database',

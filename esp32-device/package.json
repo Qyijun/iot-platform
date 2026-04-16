@@ -6,5 +6,7 @@
     "build": "pio run",
     "upload": "pio run --target upload"
   },
-  "dependencies": {}
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
 }

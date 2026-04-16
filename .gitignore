@@ -23,7 +23,10 @@ build/
 # 环境配置
 .env
 .env.local
+.env.development
+.env.production
 .env.*.local
+# !.env.example 不要排除示例文件
 
 # 固件编译产物
 *.bin
@@ -40,6 +43,12 @@ nginx/ssl/*.crt
 *.bak
 *.swp
 *~
+$null
+console.error(e))
+
+# 旧版本文件（不追踪）
+*.zip
+!*.example.zip
 
 # 操作系统
 .DS_Store

@@ -1,10 +1,25 @@
+// 加载环境变量配置
+const dotenv = require('dotenv');
+const path = require('path');
+const fs = require('fs');
+
+// 优先加载 .env.local（本地开发），其次 .env
+const envFiles = ['.env.local', '.env'];
+for (const envFile of envFiles) {
+  const envPath = path.join(__dirname, envFile);
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log(`📁 已加载配置文件: ${envFile}`);
+    break;
+  }
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const WebSocket = require('ws');
 const http = require('http');
-const path = require('path');
 const mqtt = require('mqtt');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -27,15 +42,18 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
+// ========== 环境变量配置 ==========
+// 重要：生产环境请在 .env 文件或系统环境变量中配置敏感信息！
+// .env 文件已被 .gitignore 排除，不会被提交到 GitHub
+
 const PORT = process.env.PORT || 3000;
-const WS_PORT = process.env.WS_PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://192.168.1.3:1883';
-const MQTT_USERNAME = process.env.MQTT_USERNAME || 'qiuyijun';
-const MQTT_PASSWORD = process.env.MQTT_PASSWORD || 'Qiuyijun.13825401705';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-secret-change-in-production';
+const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
+const MQTT_USERNAME = process.env.MQTT_USERNAME || '';
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || '';
 
 // 固件下载使用的服务器地址（设备需要能访问的IP）
-const SERVER_HOST = process.env.SERVER_HOST || '192.168.3.11';
+const SERVER_HOST = process.env.SERVER_HOST || 'localhost';
 
 // 邮件配置（需要配置环境变量或修改下方配置）
 const EMAIL_CONFIG = {
@@ -187,11 +205,29 @@ mqttClient.on('connect', () => {
     'device/+/status',
     'device/+/data',
     'device/+/heartbeat',
-    'device/+/bluetooth/config'
+    'device/+/telemetry',   // ESP32遥测数据
+    'device/+/bluetooth/config',
+    'device/+/ota/+'        // OTA状态上报 (progress/complete/error)
   ], (err) => {
     if (err) console.error('MQTT订阅失败:', err);
     else console.log('✅ MQTT主题订阅成功');
   });
+});
+
+mqttClient.on('disconnect', () => {
+  console.log('⚠️ MQTT连接断开');
+});
+
+mqttClient.on('close', () => {
+  console.log('⚠️ MQTT连接关闭');
+});
+
+mqttClient.on('reconnect', () => {
+  console.log('🔄 MQTT正在重连...');
+});
+
+mqttClient.on('offline', () => {
+  console.log('⚠️ MQTT客户端离线');
 });
 
 mqttClient.on('message', async (topic, message) => {
@@ -202,6 +238,40 @@ mqttClient.on('message', async (topic, message) => {
   
   console.log(`📨 MQTT消息 [${topic}]:`, data);
   
+  // 检查是否是OTA状态上报主题 (device/xxx/ota/progress|complete|error)
+  if (messageType === 'ota' && topicParts.length >= 4) {
+    const otaStatus = topicParts[3];
+    switch (otaStatus) {
+      case 'progress':
+        console.log(`📦 OTA进度 [${deviceId}]: ${data.progress}%`);
+        broadcastToClients({
+          type: 'ota_progress',
+          deviceId,
+          progress: data.progress
+        });
+        return;
+      case 'complete':
+        console.log(`✅ OTA更新完成 [${deviceId}]`);
+        await db.updateOTALog(deviceId, 'success');
+        broadcastToClients({
+          type: 'ota_complete',
+          deviceId,
+          version: data.version
+        });
+        return;
+      case 'error':
+        console.log(`❌ OTA更新失败 [${deviceId}]: ${data.error}`);
+        await db.updateOTALog(deviceId, 'failed', data.error);
+        broadcastToClients({
+          type: 'ota_error',
+          deviceId,
+          error: data.error
+        });
+        return;
+    }
+    return;
+  }
+  
   switch (messageType) {
     case 'status':
       await handleDeviceStatus(deviceId, data);
@@ -211,6 +281,10 @@ mqttClient.on('message', async (topic, message) => {
       break;
     case 'heartbeat':
       handleDeviceHeartbeat(deviceId, data);
+      break;
+    case 'telemetry':
+      // ESP32遥测数据处理（与data类型相同）
+      await handleDeviceData(deviceId, data);
       break;
     case 'bluetooth':
       handleBluetoothConfig(deviceId, data);
@@ -258,10 +332,10 @@ async function handleDeviceStatus(deviceId, data) {
     await db.updateDeviceStatus(deviceId, 'online', ip);
     console.log(`📱 设备上线: ${deviceId}`);
     
-    // 防抖：30秒内不重复记录上线日志
+    // 防抖：2分钟内不重复记录上线日志（避免网络波动导致频繁上线预警）
     const now = Date.now();
     const lastOnline = deviceOnlineCache.get(deviceId) || 0;
-    if ((now - lastOnline) > 30000) {
+    if ((now - lastOnline) > 120000) {  // 120秒 = 2分钟
       deviceOnlineCache.set(deviceId, now);
       // 记录设备上线日志（系统自动记录，用户ID为null）
       db.addUserLog(null, 'system', 'device_online', `设备 ${deviceId} 上线`, ip);
@@ -273,10 +347,10 @@ async function handleDeviceStatus(deviceId, data) {
       await db.updateDeviceStatus(deviceId, 'offline');
       console.log(`📴 设备离线: ${deviceId}`);
       
-      // 防抖：30秒内不重复记录离线日志
+      // 防抖：2分钟内不重复记录离线日志
       const now = Date.now();
       const lastOffline = deviceOfflineCache.get(deviceId) || 0;
-      if ((now - lastOffline) > 30000) {
+      if ((now - lastOffline) > 120000) {  // 120秒 = 2分钟
         deviceOfflineCache.set(deviceId, now);
         // 记录设备离线日志
         db.addUserLog(null, 'system', 'device_offline', `设备 ${deviceId} 离线`, null);
@@ -312,12 +386,37 @@ async function handleDeviceData(deviceId, data) {
 }
 
 function handleDeviceHeartbeat(deviceId, data) {
-  if (onlineDevices.has(deviceId)) {
+  // 如果设备不在在线列表中，先添加（ESP32可能只发heartbeat不发status）
+  if (!onlineDevices.has(deviceId)) {
+    onlineDevices.set(deviceId, {
+      deviceId,
+      ip: data.ip || null,
+      rssi: data.rssi,
+      version: data.version || null,
+      voltage: data.voltage || null,  // 记录电压
+      lastSeen: new Date(),
+      connected: true
+    });
+    console.log(`📱 设备心跳上线: ${deviceId}`);
+  } else {
     const device = onlineDevices.get(deviceId);
     device.lastSeen = new Date();
     device.rssi = data.rssi;
+    device.ip = data.ip || device.ip;
+    device.version = data.version || device.version;  // 更新版本号
+    device.voltage = data.voltage || null;  // 更新电压
     onlineDevices.set(deviceId, device);
   }
+  
+  // 存储心跳数据到数据库（包含电压等）
+  db.insertDeviceData(deviceId, {
+    type: 'heartbeat',
+    rssi: data.rssi,
+    voltage: data.voltage,
+    free_heap: data.free_heap,
+    uptime: data.uptime,
+    version: data.version
+  }).catch(err => console.error('心跳数据存储失败:', err.message));
 }
 
 function handleBluetoothConfig(deviceId, data) {
@@ -789,11 +888,166 @@ app.get('/api/devices/:deviceId', authenticateToken, requirePermission(PERMISSIO
     }
     
     const onlineInfo = onlineDevices.get(req.params.deviceId);
+    const groups = await db.getGroupsByDevice(req.params.deviceId);
     res.json({
       ...device,
       online: !!onlineInfo,
-      ...onlineInfo
+      ...onlineInfo,
+      groups
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============ 设备分组管理 ============
+
+// 获取所有分组
+app.get('/api/groups', authenticateToken, requirePermission(PERMISSIONS.GROUP_VIEW), async (req, res) => {
+  try {
+    const groups = await db.getAllGroups();
+    res.json(groups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 获取设备列表（带分组信息）
+app.get('/api/devices/with-groups', authenticateToken, requirePermission(PERMISSIONS.DEVICE_VIEW), async (req, res) => {
+  try {
+    const devices = await db.getDevicesWithGroups();
+    const devicesWithStatus = devices.map(device => ({
+      ...device,
+      online: onlineDevices.has(device.device_id)
+    }));
+    res.json(devicesWithStatus);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 创建分组
+app.post('/api/groups', authenticateToken, requirePermission(PERMISSIONS.GROUP_ADD), async (req, res) => {
+  try {
+    const { name, description, icon, color, sort_order } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: '分组名称不能为空' });
+    }
+    const id = await db.createGroup(name, description, icon, color, sort_order);
+    db.addUserLog(req.user.userId, req.user.username, 'group_create', `创建分组: ${name}`, req.ip);
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 更新分组
+app.put('/api/groups/:id', authenticateToken, requirePermission(PERMISSIONS.GROUP_EDIT), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, icon, color, sort_order } = req.body;
+    const group = await db.getGroupById(id);
+    await db.updateGroup(id, name, description, icon, color, sort_order);
+    db.addUserLog(req.user.userId, req.user.username, 'group_edit', `编辑分组: ${group?.name || id}`, req.ip);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 删除分组
+app.delete('/api/groups/:id', authenticateToken, requirePermission(PERMISSIONS.GROUP_DELETE), async (req, res) => {
+  try {
+    const group = await db.getGroupById(req.params.id);
+    await db.deleteGroup(req.params.id);
+    db.addUserLog(req.user.userId, req.user.username, 'group_delete', `删除分组: ${group?.name || req.params.id}`, req.ip);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 获取分组下的设备
+app.get('/api/groups/:id/devices', authenticateToken, requirePermission(PERMISSIONS.GROUP_VIEW), async (req, res) => {
+  try {
+    const devices = await db.getDevicesByGroup(req.params.id);
+    const devicesWithStatus = devices.map(device => ({
+      ...device,
+      online: onlineDevices.has(device.device_id)
+    }));
+    res.json(devicesWithStatus);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 添加设备到分组
+app.post('/api/groups/:id/devices', authenticateToken, requirePermission(PERMISSIONS.GROUP_DEVICE_ADD), async (req, res) => {
+  try {
+    const { deviceId } = req.body;
+    await db.addDeviceToGroup(req.params.id, deviceId);
+    const group = await db.getGroupById(req.params.id);
+    db.addUserLog(req.user.userId, req.user.username, 'group_device_add', `添加设备 ${deviceId} 到分组 ${group?.name || req.params.id}`, req.ip);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 从分组移除设备
+app.delete('/api/groups/:groupId/devices/:deviceId', authenticateToken, requirePermission(PERMISSIONS.GROUP_DEVICE_REMOVE), async (req, res) => {
+  try {
+    const group = await db.getGroupById(req.params.groupId);
+    await db.removeDeviceFromGroup(req.params.groupId, req.params.deviceId);
+    db.addUserLog(req.user.userId, req.user.username, 'group_device_remove', `从分组 ${group?.name || req.params.groupId} 移除设备 ${req.params.deviceId}`, req.ip);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 批量添加设备到分组
+app.post('/api/groups/:id/devices/batch', authenticateToken, requirePermission(PERMISSIONS.GROUP_DEVICE_ADD), async (req, res) => {
+  try {
+    const { deviceIds } = req.body;
+    const group = await db.getGroupById(req.params.id);
+    for (const deviceId of deviceIds) {
+      await db.addDeviceToGroup(req.params.id, deviceId);
+    }
+    db.addUserLog(req.user.userId, req.user.username, 'group_device_add_batch', `批量添加 ${deviceIds.length} 台设备到分组 ${group?.name || req.params.id}`, req.ip);
+    res.json({ success: true, count: deviceIds.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 清空分组下的所有设备
+app.delete('/api/groups/:id/devices/all', authenticateToken, requirePermission(PERMISSIONS.GROUP_DEVICE_CLEAR), async (req, res) => {
+  try {
+    const group = await db.getGroupById(req.params.id);
+    const count = (await db.getDevicesByGroup(req.params.id)).length;
+    await db.clearGroupDevices(req.params.id);
+    db.addUserLog(req.user.userId, req.user.username, 'group_device_clear', `清空分组 ${group?.name || req.params.id} 的所有设备 (${count}台)`, req.ip);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 移动设备到其他分组
+app.post('/api/groups/move-devices', authenticateToken, requirePermission(PERMISSIONS.GROUP_DEVICE_MOVE), async (req, res) => {
+  try {
+    const { deviceIds, fromGroupId, toGroupId } = req.body;
+    if (!deviceIds || !fromGroupId || !toGroupId) {
+      return res.status(400).json({ error: '参数不完整' });
+    }
+    const fromGroup = await db.getGroupById(fromGroupId);
+    const toGroup = await db.getGroupById(toGroupId);
+    for (const deviceId of deviceIds) {
+      await db.moveDeviceToGroup(deviceId, fromGroupId, toGroupId);
+    }
+    db.addUserLog(req.user.userId, req.user.username, 'group_device_move', `移动 ${deviceIds.length} 台设备从分组 ${fromGroup?.name || fromGroupId} 到 ${toGroup?.name || toGroupId}`, req.ip);
+    res.json({ success: true, count: deviceIds.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -836,7 +1090,7 @@ app.get('/api/devices/:deviceId/chart', authenticateToken, requirePermission(PER
   const { deviceId } = req.params;
   const { period = '1h' } = req.query;  // 1h, 6h, 24h, 7d, 30d
   
-  // 计算时间范围
+  // 计算时间范围（使用本地时间）
   const now = new Date();
   let startTime;
   
@@ -850,18 +1104,25 @@ app.get('/api/devices/:deviceId/chart', authenticateToken, requirePermission(PER
   }
   
   try {
-    const rawData = await db.getDeviceDataByTimeRange(deviceId, startTime.toISOString(), now.toISOString());
+    // 使用本地时间格式查询，避免时区问题
+    const formatLocalDate = (d) => {
+      const pad = (n) => n.toString().padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+    const rawData = await db.getDeviceDataByTimeRange(deviceId, formatLocalDate(startTime), formatLocalDate(now));
     
     // 解析JSON数据并格式化
     const chartData = rawData.map(item => {
       try {
         const parsed = typeof item.data_value === 'string' ? JSON.parse(item.data_value) : item.data_value;
+        // 转换时间戳为时间戳数字（毫秒）
+        const timeMs = new Date(item.created_at).getTime();
         return {
-          time: item.created_at,
+          time: timeMs,
           ...parsed
         };
       } catch (e) {
-        return { time: item.created_at, raw: item.data_value };
+        return { time: new Date(item.created_at).getTime(), raw: item.data_value };
       }
     });
     
@@ -1130,15 +1391,15 @@ app.post('/api/protocols/:type/test', authenticateToken, requirePermission(PERMI
   });
 });
 
-// 获取用户日志列表（管理员）
-app.get('/api/admin/logs', authenticateToken, requirePermission(PERMISSIONS.SYSTEM_VIEW), async (req, res) => {
+// 获取用户日志列表
+app.get('/api/admin/logs', authenticateToken, requirePermission(PERMISSIONS.LOG_VIEW), async (req, res) => {
   try {
     const { page = 1, limit = 20, action, startDate, endDate } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const logs = await db.getUserLogs(parseInt(limit), offset, action || null, startDate || null, endDate || null);
     const countResult = await db.countUserLogs(action || null, startDate || null, endDate || null);
-    
+
     res.json({
       logs,
       total: countResult.total,
@@ -1522,40 +1783,91 @@ app.get('/api/admin/permissions', authenticateToken, requirePermission(PERMISSIO
   try {
     const permissions = await db.getAllPermissions();
     
-    // 菜单与权限的树形结构定义
+    // 菜单与权限的树形结构定义 - 三级结构
     const menuTree = [
       {
-        id: 'menu:device',
+        menuId: 'menu_device_manage',
         name: '设备管理',
-        children: permissions.filter(p => 
-          ['device:view', 'device:add', 'device:edit', 'device:delete', 'device:control'].includes(p.code)
-        ).map(p => ({ id: p.id, code: p.code, name: p.name }))
+        children: [
+          {
+            menuId: 'menu_device',
+            name: '设备列表',
+            children: permissions.filter(p => 
+              ['device:view', 'device:add', 'device:edit', 'device:delete', 'device:control'].includes(p.code)
+            ).map(p => ({ id: p.id, code: p.code, name: p.name }))
+          },
+          {
+            menuId: 'menu_group',
+            name: '设备分组',
+            children: permissions.filter(p => 
+              ['group:view', 'group:add', 'group:edit', 'group:delete', 'group:device:add', 'group:device:remove', 'group:device:move', 'group:device:clear'].includes(p.code)
+            ).map(p => ({ id: p.id, code: p.code, name: p.name }))
+          },
+          {
+            menuId: 'menu_firmware',
+            name: '固件管理',
+            children: permissions.filter(p => 
+              ['firmware:view', 'firmware:upload', 'firmware:download', 'firmware:delete', 'firmware:upgrade'].includes(p.code)
+            ).map(p => ({ id: p.id, code: p.code, name: p.name }))
+          },
+          {
+            menuId: 'menu_bluetooth',
+            name: '蓝牙配网',
+            children: permissions.filter(p => 
+              ['bluetooth:view'].includes(p.code)
+            ).map(p => ({ id: p.id, code: p.code, name: p.name }))
+          }
+        ]
       },
       {
-        id: 'menu:bluetooth',
-        name: '蓝牙配网',
-        children: []
-      },
-      {
-        id: 'menu:user',
+        menuId: 'menu_user',
         name: '用户管理',
         children: permissions.filter(p => 
           ['user:view', 'user:add', 'user:edit', 'user:delete', 'user:role'].includes(p.code)
         ).map(p => ({ id: p.id, code: p.code, name: p.name }))
       },
       {
-        id: 'menu:role',
+        menuId: 'menu_role',
         name: '角色权限',
         children: permissions.filter(p => 
           ['role:view', 'role:add', 'role:edit', 'role:delete', 'role:permission'].includes(p.code)
         ).map(p => ({ id: p.id, code: p.code, name: p.name }))
       },
       {
-        id: 'menu:settings',
+        menuId: 'menu_settings',
         name: '系统设置',
-        children: permissions.filter(p => 
-          ['system:view', 'settings:basic', 'settings:network', 'settings:email', 'settings:password', 'settings:database'].includes(p.code)
-        ).map(p => ({ id: p.id, code: p.code, name: p.name }))
+        children: [
+          {
+            menuId: 'menu_settings_basic',
+            name: '基本信息',
+            children: permissions.filter(p => p.code === 'settings:basic').map(p => ({ id: p.id, code: p.code, name: p.name }))
+          },
+          {
+            menuId: 'menu_settings_network',
+            name: '网络配置',
+            children: permissions.filter(p => p.code === 'settings:network').map(p => ({ id: p.id, code: p.code, name: p.name }))
+          },
+          {
+            menuId: 'menu_settings_email',
+            name: '邮件服务',
+            children: permissions.filter(p => p.code === 'settings:email').map(p => ({ id: p.id, code: p.code, name: p.name }))
+          },
+          {
+            menuId: 'menu_settings_password',
+            name: '修改密码',
+            children: permissions.filter(p => p.code === 'settings:password').map(p => ({ id: p.id, code: p.code, name: p.name }))
+          },
+          {
+            menuId: 'menu_settings_database',
+            name: '数据库配置',
+            children: permissions.filter(p => p.code === 'settings:database').map(p => ({ id: p.id, code: p.code, name: p.name }))
+          },
+          {
+            menuId: 'menu_logs',
+            name: '操作日志',
+            children: permissions.filter(p => p.code === 'log:view').map(p => ({ id: p.id, code: p.code, name: p.name }))
+          }
+        ]
       }
     ];
     
@@ -1687,8 +1999,11 @@ const fsExtra = require('fs-extra');
 // 确保固件目录存在
 fsExtra.ensureDirSync(FIRMWARE_DIR);
 
+// 固件文件公开访问（无需认证，ESP32可直接下载）
+app.use('/firmware', express.static(FIRMWARE_DIR));
+
 // 获取固件列表
-app.get('/api/firmware', authenticateToken, requirePermission(PERMISSIONS.SYSTEM_VIEW), async (req, res) => {
+app.get('/api/firmware', authenticateToken, requirePermission(PERMISSIONS.FIRMWARE_VIEW), async (req, res) => {
   try {
     const files = await fsExtra.readdir(FIRMWARE_DIR);
     const firmwares = [];
@@ -1701,7 +2016,7 @@ app.get('/api/firmware', authenticateToken, requirePermission(PERMISSIONS.SYSTEM
           filename: file,
           size: stats.size,
           created: stats.birthtime,
-          url: `${baseUrl}/firmware/${file}`
+          url: `${baseUrl}/firmware/${file}`  // 公开URL，ESP32可直接访问
         });
       }
     }
@@ -1727,7 +2042,7 @@ const upload = multer({
   }
 });
 
-app.post('/api/firmware/upload', authenticateToken, requirePermission(PERMISSIONS.SYSTEM_VIEW), upload.single('firmware'), async (req, res) => {
+app.post('/api/firmware/upload', authenticateToken, requirePermission(PERMISSIONS.FIRMWARE_UPLOAD), upload.single('firmware'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: '请上传固件文件' });
@@ -1743,6 +2058,9 @@ app.post('/api/firmware/upload', authenticateToken, requirePermission(PERMISSION
     const filepath = path.join(FIRMWARE_DIR, filename);
     await fsExtra.writeFile(filepath, req.file.buffer);
     
+    // 记录操作日志
+    await db.addUserLog(req.user.userId, req.user.username, 'firmware_upload', `上传固件: ${filename}`, req.ip);
+    
     res.json({
       success: true,
       message: '固件上传成功',
@@ -1756,7 +2074,7 @@ app.post('/api/firmware/upload', authenticateToken, requirePermission(PERMISSION
 });
 
 // 获取指定固件信息
-app.get('/api/firmware/:filename', authenticateToken, requirePermission(PERMISSIONS.SYSTEM_VIEW), async (req, res) => {
+app.get('/api/firmware/:filename', authenticateToken, requirePermission(PERMISSIONS.FIRMWARE_VIEW), async (req, res) => {
   try {
     const filepath = path.join(FIRMWARE_DIR, req.params.filename);
     
@@ -1776,13 +2094,16 @@ app.get('/api/firmware/:filename', authenticateToken, requirePermission(PERMISSI
 });
 
 // 删除固件
-app.delete('/api/firmware/:filename', authenticateToken, requirePermission(PERMISSIONS.SYSTEM_VIEW), async (req, res) => {
+app.delete('/api/firmware/:filename', authenticateToken, requirePermission(PERMISSIONS.FIRMWARE_DELETE), async (req, res) => {
   try {
     const filepath = path.join(FIRMWARE_DIR, req.params.filename);
     
     if (!await fsExtra.pathExists(filepath)) {
       return res.status(404).json({ error: '固件不存在' });
     }
+    
+    // 记录操作日志
+    await db.addUserLog(req.user.userId, req.user.username, 'firmware_delete', `删除固件: ${req.params.filename}`, req.ip);
     
     await fsExtra.remove(filepath);
     res.json({ success: true, message: '固件已删除' });
@@ -1843,48 +2164,6 @@ app.post('/api/devices/:deviceId/ota', authenticateToken, requirePermission(PERM
   } catch (err) {
     console.error('OTA下发失败:', err);
     res.status(500).json({ error: err.message });
-  }
-});
-
-// 设备OTA状态上报
-mqttClient.on('message', async (topic, message) => {
-  // ... 现有代码 ...
-  
-  // OTA状态处理
-  if (topic.includes('/ota/')) {
-    const topicParts = topic.split('/');
-    const deviceId = topicParts[1];
-    const otaStatus = topicParts[2];
-    const data = JSON.parse(message.toString());
-    
-    switch (otaStatus) {
-      case 'progress':
-        console.log(`📦 OTA进度 [${deviceId}]: ${data.progress}%`);
-        broadcastToClients({
-          type: 'ota_progress',
-          deviceId,
-          progress: data.progress
-        });
-        break;
-      case 'complete':
-        console.log(`✅ OTA更新完成 [${deviceId}]`);
-        await db.updateOTALog(deviceId, 'success');
-        broadcastToClients({
-          type: 'ota_complete',
-          deviceId,
-          version: data.version
-        });
-        break;
-      case 'error':
-        console.log(`❌ OTA更新失败 [${deviceId}]: ${data.error}`);
-        await db.updateOTALog(deviceId, 'failed', data.error);
-        broadcastToClients({
-          type: 'ota_error',
-          deviceId,
-          error: data.error
-        });
-        break;
-    }
   }
 });
 
@@ -1963,8 +2242,25 @@ app.post('/api/admin/database/reset', authenticateToken, requirePermission(PERMI
   }
 });
 
-// 静态文件服务：固件下载
-app.use('/firmware', express.static(FIRMWARE_DIR));
+// 固件下载（受权限保护）
+app.get('/firmware/:filename', authenticateToken, requirePermission(PERMISSIONS.FIRMWARE_DOWNLOAD), (req, res) => {
+  const filename = req.params.filename;
+  const filepath = path.join(FIRMWARE_DIR, filename);
+  
+  // 安全检查：只允许下载 .bin 文件
+  if (!filename.endsWith('.bin') || filename.includes('..')) {
+    return res.status(403).json({ error: '禁止访问' });
+  }
+  
+  res.download(filepath, filename, (err) => {
+    if (err) {
+      console.error('固件下载错误:', err);
+      if (!res.headersSent) {
+        res.status(404).json({ error: '固件不存在' });
+      }
+    }
+  });
+});
 
 // ============ 启动服务器 ============
 
@@ -2012,6 +2308,14 @@ setInterval(() => {
       console.log(`⏱️ 设备超时离线: ${deviceId}`);
       onlineDevices.delete(deviceId);
       db.updateDeviceStatus(deviceId, 'offline');
+      
+      // 心跳超时时记录离线日志（防抖：2分钟内不重复记录）
+      const cacheTime = Date.now();
+      const lastOffline = deviceOfflineCache.get(deviceId) || 0;
+      if ((cacheTime - lastOffline) > 120000) {  // 120秒 = 2分钟
+        deviceOfflineCache.set(deviceId, cacheTime);
+        db.addUserLog(null, 'system', 'device_offline', `设备 ${deviceId} 离线（心跳超时）`, null);
+      }
       
       broadcastToClients({
         type: 'device_offline',

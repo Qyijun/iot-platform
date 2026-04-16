@@ -5,6 +5,10 @@
         <div class="card-header">
           <span>设备列表</span>
           <div class="header-buttons">
+            <el-select v-model="filterGroupId" placeholder="全部分组" clearable style="width: 180px; margin-right: 10px;">
+              <el-option label="全部设备" :value="null" />
+              <el-option v-for="g in groups" :key="g.id" :label="`${getIcon(g.icon)} ${g.name}`" :value="g.id" />
+            </el-select>
             <el-button v-if="btnPerms.add" type="info" @click="showDiscoverDialog = true">
               <el-icon><Search /></el-icon>发现设备
             </el-button>
@@ -15,7 +19,7 @@
         </div>
       </template>
       
-      <el-table :data="devices" v-loading="loading" style="width: 100%">
+      <el-table :data="filteredDevices" v-loading="loading" style="width: 100%">
         <el-table-column prop="device_id" label="设备ID" min-width="150" />
         <el-table-column prop="name" label="设备名称" min-width="150" />
         <el-table-column prop="type" label="设备类型" min-width="120" />
@@ -208,6 +212,7 @@ const userStore = useUserStore()
 const btnPerms = computed(() => userStore.getButtonPermissions('device'))
 
 const devices = ref([])
+const groups = ref([])
 const loading = ref(false)
 const showAddDialog = ref(false)
 const showCommandDialog = ref(false)
@@ -215,6 +220,21 @@ const showDiscoverDialog = ref(false)
 const adding = ref(false)
 const sendingCommand = ref(false)
 const selectedDevice = ref({})
+const filterGroupId = ref(null)
+const devicesInGroups = ref({}) // deviceId -> groupIds
+
+const iconMap = {
+  folder: '📁', home: '🏠', factory: '🏭',
+  warehouse: '📦', office: '🏢', lab: '🔬',
+  outdoor: '🏕️', store: '🏪'
+}
+const getIcon = (icon) => iconMap[icon] || '📁'
+
+// 按分组筛选设备
+const filteredDevices = computed(() => {
+  if (!filterGroupId.value) return devices.value
+  return devices.value.filter(d => devicesInGroups.value[d.device_id]?.includes(filterGroupId.value))
+})
 
 // 发现设备相关
 const discoveredDevices = ref([])
@@ -243,7 +263,27 @@ const deviceRules = {
 
 onMounted(() => {
   fetchDevices()
+  fetchGroups()
 })
+
+const fetchGroups = async () => {
+  try {
+    const res = await axios.get('/api/groups')
+    groups.value = res.data
+    // 获取每个设备所在的分组
+    for (const g of res.data) {
+      const devicesRes = await axios.get(`/api/groups/${g.id}/devices`)
+      for (const d of devicesRes.data) {
+        if (!devicesInGroups.value[d.device_id]) {
+          devicesInGroups.value[d.device_id] = []
+        }
+        devicesInGroups.value[d.device_id].push(g.id)
+      }
+    }
+  } catch (err) {
+    console.error('获取分组失败', err)
+  }
+}
 
 const fetchDevices = async () => {
   loading.value = true
