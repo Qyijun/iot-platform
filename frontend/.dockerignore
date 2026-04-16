@@ -1,0 +1,15 @@
+# 忽略源文件和临时文件
+src/
+public/
+*.vue
+*.js
+*.ts
+*.json
+.env
+.env.local
+.git/
+.gitignore
+.vscode/
+.idea/
+node_modules/
+dist/

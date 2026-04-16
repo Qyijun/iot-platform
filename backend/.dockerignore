@@ -1,0 +1,17 @@
+# 忽略构建产物和临时文件
+*.log
+*.tmp
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.git/
+.gitignore
+node_modules/
+dist/
+build/
+.vscode/
+.idea/
+.env
+.env.local
+data/
+logs/

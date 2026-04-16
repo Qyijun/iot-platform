@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # 后端API服务
+  backend:
+    build: ./backend
+    container_name: iot-backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/data/database.sqlite
+      - MQTT_BROKER=mqtt://mqtt:1883
+      - JWT_SECRET=your-secret-key-change-in-production
+      - WS_PORT=3001
+    volumes:
+      - ./data:/data
+      - ./logs:/logs
+    depends_on:
+      - mqtt
+    networks:
+      - iot-network
+
+  # Web前端
+  frontend:
+    build: ./frontend
+    container_name: iot-frontend
+    restart: always
+    ports:
+      - "8081:80"
+      - "443:443"
+    depends_on:
+      - backend
+    networks:
+      - iot-network
+
+  # MQTT Broker
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: iot-mqtt
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mqtt/config:/mosquitto/config
+      - ./mqtt/data:/mosquitto/data
+      - ./mqtt/log:/mosquitto/log
+    networks:
+      - iot-network
+
+  # 可选：Nginx反向代理（用于公网访问）
+  nginx:
+    image: nginx:alpine
+    container_name: iot-nginx
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - iot-network
+
+networks:
+  iot-network:
+    driver: bridge
