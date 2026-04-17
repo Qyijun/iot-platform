@@ -91,6 +91,11 @@
             <el-icon><Connection /></el-icon>
             <span>数据库配置</span>
           </el-menu-item>
+          <!-- 服务器配置 - 所有用户可见 -->
+          <el-menu-item index="/settings/server">
+            <el-icon><Setting /></el-icon>
+            <span>服务器配置</span>
+          </el-menu-item>
           <!-- 操作日志 - 仅管理员可见 -->
           <el-menu-item v-if="menuPerms.settings" index="/logs">
             <el-icon><Document /></el-icon>

@@ -2317,8 +2317,8 @@ async function startServer() {
       console.log(`⚠️ 前端未构建: ${FRONTEND_DIST}`);
     }
     
-    server.listen(PORT, () => {
-      console.log(`🚀 服务器运行在端口 ${PORT}`);
+    server.listen(PORT, '::', () => {
+      console.log(`🚀 服务器运行在 [::]:${PORT} (IPv4+IPv6)`);
       console.log(`📡 WebSocket服务已启动`);
       console.log(`📦 OTA固件目录: ${FIRMWARE_DIR}`);
     });
@@ -2355,5 +2355,17 @@ setInterval(() => {
     }
   });
 }, 30000);
+
+// 每天凌晨3点清理过期数据（保留30天）
+setInterval(async () => {
+  const now = new Date();
+  if (now.getHours() === 3 && now.getMinutes() === 0) {
+    try {
+      await db.cleanupOldData(30);
+    } catch (err) {
+      console.error('自动清理失败:', err.message);
+    }
+  }
+}, 60000); // 每分钟检查一次
 
 module.exports = { app, server, wss };

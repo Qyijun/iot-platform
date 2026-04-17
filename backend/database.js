@@ -1,6 +1,41 @@
 const path = require('path');
 const fs = require('fs');
 
+// 简单的内存缓存
+class QueryCache {
+  constructor(ttl = 30000) { // 默认30秒缓存
+    this.cache = new Map();
+    this.ttl = ttl;
+  }
+
+  get(key) {
+    const item = this.cache.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expire) {
+      this.cache.delete(key);
+      return null;
+    }
+    return item.value;
+  }
+
+  set(key, value) {
+    this.cache.set(key, {
+      value,
+      expire: Date.now() + this.ttl
+    });
+  }
+
+  invalidate(key) {
+    if (key) {
+      this.cache.delete(key);
+    } else {
+      this.cache.clear();
+    }
+  }
+}
+
+const queryCache = new QueryCache(30000); // 30秒缓存
+
 // 系统权限定义
 const PERMISSIONS = {
   // 设备权限
@@ -394,8 +429,55 @@ class Database {
       }
     }
 
+    // 创建索引以提升查询性能
+    await this.createIndexes();
+
     // 初始化默认数据
     await this.initDefaultData();
+  }
+
+  // 创建数据库索引
+  async createIndexes() {
+    const indexes = [
+      // 设备相关索引
+      'CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status)',
+      'CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)',
+      
+      // 设备数据索引（高频查询）
+      'CREATE INDEX IF NOT EXISTS idx_device_data_device_id ON device_data(device_id)',
+      'CREATE INDEX IF NOT EXISTS idx_device_data_created_at ON device_data(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_device_data_type ON device_data(data_type)',
+      
+      // 用户相关索引
+      'CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)',
+      
+      // 角色权限索引
+      'CREATE INDEX IF NOT EXISTS idx_role_permissions_role_id ON role_permissions(role_id)',
+      'CREATE INDEX IF NOT EXISTS idx_role_permissions_perm_id ON role_permissions(permission_id)',
+      'CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id)',
+      
+      // 命令日志索引
+      'CREATE INDEX IF NOT EXISTS idx_command_logs_device_id ON command_logs(device_id)',
+      'CREATE INDEX IF NOT EXISTS idx_command_logs_created_at ON command_logs(created_at)',
+      
+      // 操作日志索引
+      'CREATE INDEX IF NOT EXISTS idx_user_logs_user_id ON user_logs(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_user_logs_created_at ON user_logs(created_at)',
+      
+      // 设备分组索引
+      'CREATE INDEX IF NOT EXISTS idx_device_group_members_device_id ON device_group_members(device_id)',
+      'CREATE INDEX IF NOT EXISTS idx_device_group_members_group_id ON device_group_members(group_id)',
+    ];
+
+    for (const sql of indexes) {
+      try {
+        await this.run(sql);
+      } catch (err) {
+        // 索引可能已存在，忽略错误
+      }
+    }
+    console.log('✅ 数据库索引创建完成');
   }
 
   // 初始化默认数据
@@ -572,8 +654,23 @@ class Database {
     );
   }
 
-  getAllDevices() {
-    return this.all(`SELECT * FROM devices ORDER BY created_at DESC`);
+  getAllDevices(page = 1, pageSize = 100) {
+    // 使用缓存（5秒）
+    const cacheKey = `devices_${page}_${pageSize}`;
+    const cached = queryCache.get(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    const offset = (page - 1) * pageSize;
+    const promise = this.all(
+      `SELECT * FROM devices ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [pageSize, offset]
+    );
+    
+    promise.then(result => {
+      queryCache.set(cacheKey, result);
+    });
+    
+    return promise;
   }
 
   getDeviceById(deviceId) {
@@ -600,6 +697,9 @@ class Database {
 
   // ============ 设备数据 ============
   insertDeviceData(deviceId, data) {
+    // 清除设备数据缓存
+    queryCache.invalidate();
+    
     return this.run(
       `INSERT INTO device_data (device_id, data_type, data_value) VALUES (?, ?, ?)`,
       [deviceId, data.type || 'unknown', JSON.stringify(data)]
@@ -1109,6 +1209,84 @@ class Database {
       return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
+    }
+  }
+
+  // ============ 数据清理 ============
+  // 清理过期数据（保留最近 N 天）
+  async cleanupOldData(daysToKeep = 30) {
+    const isMySQL = this.config.type === 'mysql';
+    const isPg = this.config.type === 'postgresql';
+    
+    let dateFilter;
+    if (isMySQL || isPg) {
+      dateFilter = `created_at < DATE_SUB(NOW(), INTERVAL ${daysToKeep} DAY)`;
+    } else {
+      dateFilter = `created_at < datetime('now', '-${daysToKeep} days')`;
+    }
+
+    const results = {
+      deviceData: 0,
+      commandLogs: 0,
+      userLogs: 0,
+      otaLogs: 0
+    };
+
+    try {
+      // 清理设备历史数据
+      const deviceDataResult = await this.run(
+        `DELETE FROM device_data WHERE ${dateFilter}`
+      );
+      results.deviceData = deviceDataResult.changes || 0;
+
+      // 清理命令日志
+      const commandResult = await this.run(
+        `DELETE FROM command_logs WHERE ${dateFilter}`
+      );
+      results.commandLogs = commandResult.changes || 0;
+
+      // 清理用户日志
+      const userLogResult = await this.run(
+        `DELETE FROM user_logs WHERE ${dateFilter}`
+      );
+      results.userLogs = userLogResult.changes || 0;
+
+      // 清理OTA日志
+      const otaResult = await this.run(
+        `DELETE FROM ota_logs WHERE ${dateFilter}`
+      );
+      results.otaLogs = otaResult.changes || 0;
+
+      console.log(`🗑️ 数据清理完成: 删除了 ${results.deviceData} 条设备数据, ${results.commandLogs} 条命令日志`);
+      return { success: true, ...results };
+    } catch (err) {
+      console.error('数据清理失败:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  // 获取数据库大小
+  async getDatabaseSize() {
+    try {
+      const isMySQL = this.config.type === 'mysql';
+      const isPg = this.config.type === 'postgresql';
+      
+      let result;
+      if (isMySQL) {
+        result = await this.get(`SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb FROM information_schema.tables WHERE table_schema = DATABASE()`);
+      } else if (isPg) {
+        result = await this.get(`SELECT pg_size_pretty(pg_database_size(current_database())) as size`);
+      } else {
+        // SQLite
+        const dbPath = this.config.database;
+        if (fs.existsSync(dbPath)) {
+          const sizeBytes = fs.statSync(dbPath).size;
+          return { size_mb: (sizeBytes / 1024 / 1024).toFixed(2) };
+        }
+      }
+      return result || { size_mb: '0' };
+    } catch (err) {
+      return { size_mb: 'unknown' };
     }
   }
 

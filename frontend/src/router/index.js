@@ -104,6 +104,12 @@ const routes = [
         name: 'SettingsDatabase',
         component: () => import('../views/settings/DatabaseConfig.vue'),
         meta: { title: '数据库配置' }
+      },
+      {
+        path: 'settings/server',
+        name: 'SettingsServer',
+        component: () => import('../views/Settings.vue'),
+        meta: { title: '服务器配置' }
       }
     ]
   }
