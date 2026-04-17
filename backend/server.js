@@ -52,6 +52,9 @@ const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
 const MQTT_USERNAME = process.env.MQTT_USERNAME || '';
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || '';
 
+// 前端构建目录（用于托管）
+const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
+
 // 固件下载使用的服务器地址（设备需要能访问的IP）
 const SERVER_HOST = process.env.SERVER_HOST || 'localhost';
 
@@ -2286,6 +2289,19 @@ async function startServer() {
   try {
     await db.initPromise;
     console.log('✅ 数据库初始化完成');
+    
+    // 前端静态文件托管
+    if (fs.existsSync(FRONTEND_DIST)) {
+      app.use(express.static(FRONTEND_DIST));
+      // SPA 路由支持：所有未匹配的路由返回 index.html
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+      });
+      console.log(`🌐 前端已托管: ${FRONTEND_DIST}`);
+    } else {
+      console.log(`⚠️ 前端未构建（${FRONTEND_DIST} 不存在），跳过托管`);
+      console.log(`   请运行: cd ../frontend && npm run build`);
+    }
     
     server.listen(PORT, () => {
       console.log(`🚀 服务器运行在端口 ${PORT}`);
