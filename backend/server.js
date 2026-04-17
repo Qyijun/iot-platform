@@ -131,8 +131,18 @@ const deviceOfflineCache = new Map();  // 离线日志防抖
 let bleService = null;
 
 // 中间件
-app.use(helmet());
-app.use(cors());
+// 禁用 HSTS（允许 HTTP 访问）
+app.use(helmet({
+  hsts: false,
+  contentSecurityPolicy: false
+}));
+// CORS 配置 - 允许所有来源（开发环境）
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
