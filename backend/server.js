@@ -1,4 +1,4 @@
-这个// 加载环境变量配置
+// 加载环境变量配置
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
