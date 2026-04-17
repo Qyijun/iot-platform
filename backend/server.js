@@ -1,4 +1,4 @@
-// 加载环境变量配置
+这个// 加载环境变量配置
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
@@ -2317,10 +2317,6 @@ async function startServer() {
       console.log(`⚠️ 前端未构建: ${FRONTEND_DIST}`);
     }
       });
-      console.log(`🌐 前端已托管: ${FRONTEND_DIST}`);
-    } else {
-      console.log(`⚠️ 前端未构建（${FRONTEND_DIST} 不存在），跳过托管`);
-      console.log(`   请运行: cd ../frontend && npm run build`);
     }
     
     server.listen(PORT, () => {
