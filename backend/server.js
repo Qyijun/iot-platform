@@ -2292,10 +2292,20 @@ async function startServer() {
     
     // 前端静态文件托管
     if (fs.existsSync(FRONTEND_DIST)) {
+      // 静态文件优先
       app.use(express.static(FRONTEND_DIST));
-      // SPA 路由支持：所有未匹配的路由返回 index.html
-      app.get('*', (req, res) => {
-        res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+      // SPA fallback：未匹配的路由返回 index.html
+      app.use((req, res, next) => {
+        if (!req.path.startsWith('/api') && !req.path.startsWith('/ws') && !req.path.startsWith('/firmware')) {
+          res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+        } else {
+          next();
+        }
+      });
+      console.log(`🌐 前端已托管: ${FRONTEND_DIST}`);
+    } else {
+      console.log(`⚠️ 前端未构建: ${FRONTEND_DIST}`);
+    }
       });
       console.log(`🌐 前端已托管: ${FRONTEND_DIST}`);
     } else {
