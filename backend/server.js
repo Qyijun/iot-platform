@@ -2316,8 +2316,6 @@ async function startServer() {
     } else {
       console.log(`⚠️ 前端未构建: ${FRONTEND_DIST}`);
     }
-      });
-    }
     
     server.listen(PORT, () => {
       console.log(`🚀 服务器运行在端口 ${PORT}`);
