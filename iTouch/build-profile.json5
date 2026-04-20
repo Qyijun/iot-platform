@@ -1,0 +1,56 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\qiu\\.ohos\\config\\default_iTouch_x1FKo8BmeE8nbg34NOzUIWJxsmef0ORMdi_unLuJ704=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001BAB030379DA831D379E3E45E556B122C3C65006FCF85FF7DAF04806B152377855512B6185BAA0A4",
+          "profile": "C:\\Users\\qiu\\.ohos\\config\\default_iTouch_x1FKo8BmeE8nbg34NOzUIWJxsmef0ORMdi_unLuJ704=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\qiu\\.ohos\\config\\default_iTouch_x1FKo8BmeE8nbg34NOzUIWJxsmef0ORMdi_unLuJ704=.p12",
+          "storePassword": "0000001BA660C4AC801BB31A8F17A9BB906C1419ED4266E414976E3733AE59F1DA3BCE1E0AA203D1875584"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "6.0.2(22)",
+        "compatibleSdkVersion": "6.0.2(22)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

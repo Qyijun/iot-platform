@@ -1,0 +1,11 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/LoginPage",
+    "pages/Home",
+    "pages/DeviceDetail",
+    "pages/ServerSettings",
+    "pages/DeviceProvision",
+    "pages/AddDevice"
+  ]
+}

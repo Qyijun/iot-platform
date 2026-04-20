@@ -1,0 +1,2 @@
+# Obfuscation rules for HarmonyOS app
+# This file is used to configure code obfuscation rules for release builds

@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+*.class
+
+# Hvigor
+.hvigor/
+hvigor/
+entry/.hvigor/
+entry/hvigor/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Node
+node_modules/
+*.log
+
+# Build
+*.hap
+*.app
+*.js
+*.ets
+
+# Local
+local.properties
