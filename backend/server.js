@@ -143,40 +143,80 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// 显式处理 OPTIONS 预检请求
+app.options('*', (req, res) => {
+  console.log('📋 OPTIONS 预检请求:', req.path);
+  console.log('   Origin:', req.headers.origin);
+  console.log('   Access-Control-Request-Headers:', req.headers['access-control-request-headers']);
+  console.log('   Authorization(预检):', req.headers['authorization'] ? '有值' : '无');
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
+
+// 打印所有到达的请求（最早阶段）- 开发调试用
+app.use((req, res, next) => {
+  console.log('📨', req.method, req.path);
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 限流
+// 限流 - 5分钟内允许500个请求
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100
+  windowMs: 5 * 60 * 1000,  // 5分钟
+  max: 500,  // 5分钟内最多500个请求
 });
 app.use('/api/', limiter);
 
-// JWT验证中间件
+// JWT验证中间件 - 支持Authorization header和query参数
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const queryToken = req.query.token;
+  
+  // 支持两种方式：1) Authorization: Bearer xxx  2) ?token=xxx
+  const token = authHeader ? authHeader.split(' ')[1] : queryToken;
+  
+  console.log('🔍 JWT中间件收到请求:', req.method, req.path);
+  console.log('   Authorization header:', authHeader ? '有' : '无');
+  console.log('   Query token:', queryToken ? '有' : '无');
+  console.log('   最终token:', token ? token.substring(0, 30) + '...' : '无');
   
   if (!token) {
+    console.log('   ❌ 未提供Token');
     return res.status(401).json({ error: '未提供认证令牌' });
   }
   
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
+    console.log('   ✅ JWT验证成功, userId:', decoded.userId);
     
     // 获取用户完整信息（含权限）
     const user = await db.getUserWithRoles(decoded.userId);
     if (!user) {
+      console.log('   ❌ 用户不存在');
       return res.status(401).json({ error: '用户不存在' });
     }
     
     req.userPermissions = user.permissions;
     req.userRoles = user.roles;
+    console.log('   ✅ 权限列表:', user.permissions);
     next();
   } catch (err) {
-    return res.status(403).json({ error: '令牌无效' });
+    console.error('❌ JWT验证失败:', err.message);
+    console.error('   收到的Token:', token ? token.substring(0, 50) + '...' : '无');
+    console.error('   服务器JWT_SECRET:', JWT_SECRET ? JWT_SECRET.substring(0, 20) + '...' : '未设置');
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(403).json({ error: '令牌签名无效，可能JWT_SECRET不一致' });
+    } else if (err.name === 'TokenExpiredError') {
+      return res.status(403).json({ error: '令牌已过期' });
+    }
+    return res.status(403).json({ error: '令牌无效: ' + err.message });
   }
 };
 
@@ -753,12 +793,53 @@ app.put('/api/admin/email-config', authenticateToken, requireAdmin, async (req, 
 
 // 创建设备
 app.post('/api/devices', authenticateToken, requirePermission(PERMISSIONS.DEVICE_ADD), async (req, res) => {
-  const { deviceId, name, type } = req.body;
-  
+  // 支持 deviceId 和 deviceKey 两种参数
+  const { deviceId, deviceKey, name, type } = req.body;
+
+  console.log('=== 添加设备请求 ===');
+  console.log('deviceId:', deviceId);
+  console.log('deviceKey:', deviceKey);
+  console.log('name:', name);
+  console.log('type:', type);
+
+  // 如果没有提供 deviceId，但提供了 deviceKey，则使用 deviceKey
+  const finalDeviceId = (deviceId || deviceKey || '').trim();
+
+  if (!finalDeviceId) {
+    // 如果都没有提供，自动生成一个设备ID
+    const autoId = `DEV_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    console.log('=== 未提供设备ID，自动生成:', autoId);
+    const finalName = name?.trim() || `设备_${autoId}`;
+    const finalType = type || 'ESP32';
+
+    try {
+      await db.createDevice(autoId, finalName, finalType);
+      console.log('=== 设备添加成功(自动ID):', autoId);
+      res.json({ success: true, deviceId: autoId });
+    } catch (err) {
+      console.error('!!! 添加设备失败:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+    return;
+  }
+
+  const finalName = name?.trim() || `设备_${finalDeviceId}`;
+  const finalType = type || 'ESP32';
+
   try {
-    await db.createDevice(deviceId, name, type);
-    res.json({ success: true, deviceId });
+    // 先检查设备是否已存在
+    const existing = await db.getDeviceById(finalDeviceId);
+    if (existing) {
+      console.log('=== 设备已存在:', finalDeviceId);
+      return res.status(400).json({ error: '设备已存在', deviceId: finalDeviceId });
+    }
+
+    await db.createDevice(finalDeviceId, finalName, finalType);
+    console.log('=== 设备添加成功:', finalDeviceId);
+    res.json({ success: true, deviceId: finalDeviceId });
   } catch (err) {
+    console.error('!!! 添加设备失败:', err.message);
+    console.error('!!! 错误详情:', err.stack);
     res.status(500).json({ error: err.message });
   }
 });
@@ -766,16 +847,21 @@ app.post('/api/devices', authenticateToken, requirePermission(PERMISSIONS.DEVICE
 // 删除设备
 app.delete('/api/devices/:deviceId', authenticateToken, requirePermission(PERMISSIONS.DEVICE_DELETE), async (req, res) => {
   const { deviceId } = req.params;
-  
+
+  // 参数验证
+  if (!deviceId || deviceId === 'undefined' || deviceId === 'null') {
+    return res.status(400).json({ error: '无效的设备ID' });
+  }
+
   try {
     const result = await db.deleteDevice(deviceId);
     if (result.changes === 0) {
       return res.status(404).json({ error: '设备不存在' });
     }
-    
+
     // 如果设备在线，从在线列表移除
     onlineDevices.delete(deviceId);
-    
+
     res.json({ success: true, message: '设备已删除' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -786,14 +872,34 @@ app.delete('/api/devices/:deviceId', authenticateToken, requirePermission(PERMIS
 app.get('/api/devices', authenticateToken, requirePermission(PERMISSIONS.DEVICE_VIEW), async (req, res) => {
   try {
     const devices = await db.getAllDevices();
-    // 合并在线状态
-    const devicesWithStatus = devices.map(device => ({
-      ...device,
-      online: onlineDevices.has(device.device_id),
-      ...onlineDevices.get(device.device_id)
+    console.log('=== 设备列表查询结果, 数量:', devices.length);
+
+    // 合并在线状态和最新数据，确保兼容App的id字段
+    const devicesWithStatus = await Promise.all(devices.map(async device => {
+      const deviceId = device?.device_id || device?.id;
+
+      // 调试：检查每个设备的ID
+      if (!deviceId) {
+        console.error('!!! 发现无效设备, device_id为空:', JSON.stringify(device));
+      }
+
+      const onlineInfo = onlineDevices.get(deviceId);
+      const latestData = deviceId ? await db.getLatestDeviceData(deviceId) : null;
+
+      return {
+        ...device,
+        id: deviceId,  // 确保同时有 id 和 device_id，方便不同前端兼容
+        device_id: deviceId,  // 双重保险
+        online: deviceId ? onlineDevices.has(deviceId) : false,
+        ...onlineInfo,
+        data: latestData
+      };
     }));
+
+    console.log('=== 设备列表返回, 数量:', devicesWithStatus.length);
     res.json(devicesWithStatus);
   } catch (err) {
+    console.error('!!! 获取设备列表失败:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -895,18 +1001,27 @@ app.post('/api/devices/batch-add', authenticateToken, requirePermission(PERMISSI
 // 获取设备详情
 app.get('/api/devices/:deviceId', authenticateToken, requirePermission(PERMISSIONS.DEVICE_VIEW), async (req, res) => {
   try {
-    const device = await db.getDeviceById(req.params.deviceId);
+    // 参数验证
+    const deviceId = req.params.deviceId;
+    if (!deviceId || deviceId === 'undefined' || deviceId === 'null') {
+      return res.status(400).json({ error: '无效的设备ID' });
+    }
+
+    const device = await db.getDeviceById(deviceId);
     if (!device) {
       return res.status(404).json({ error: '设备不存在' });
     }
-    
-    const onlineInfo = onlineDevices.get(req.params.deviceId);
-    const groups = await db.getGroupsByDevice(req.params.deviceId);
+
+    const onlineInfo = onlineDevices.get(deviceId);
+    const groups = await db.getGroupsByDevice(deviceId);
+    const latestData = await db.getLatestDeviceData(deviceId);
     res.json({
       ...device,
+      id: deviceId,  // 确保同时有 id 和 device_id
       online: !!onlineInfo,
       ...onlineInfo,
-      groups
+      groups,
+      data: latestData
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1070,11 +1185,16 @@ app.post('/api/groups/move-devices', authenticateToken, requirePermission(PERMIS
 app.put('/api/devices/:deviceId', authenticateToken, requirePermission(PERMISSIONS.DEVICE_EDIT), async (req, res) => {
   const { deviceId } = req.params;
   const { name } = req.body;
-  
+
+  // 参数验证
+  if (!deviceId || deviceId === 'undefined' || deviceId === 'null') {
+    return res.status(400).json({ error: '无效的设备ID' });
+  }
+
   if (!name || name.trim() === '') {
     return res.status(400).json({ error: '设备名称不能为空' });
   }
-  
+
   try {
     const result = await db.updateDevice(deviceId, name.trim());
     if (result.changes === 0) {
@@ -1089,9 +1209,15 @@ app.put('/api/devices/:deviceId', authenticateToken, requirePermission(PERMISSIO
 // 获取设备数据历史
 app.get('/api/devices/:deviceId/data', authenticateToken, requirePermission(PERMISSIONS.DEVICE_VIEW), async (req, res) => {
   const { limit = 100, offset = 0 } = req.query;
-  
+  const deviceId = req.params.deviceId;
+
+  // 参数验证
+  if (!deviceId || deviceId === 'undefined' || deviceId === 'null') {
+    return res.status(400).json({ error: '无效的设备ID' });
+  }
+
   try {
-    const data = await db.getDeviceData(req.params.deviceId, parseInt(limit), parseInt(offset));
+    const data = await db.getDeviceData(deviceId, parseInt(limit), parseInt(offset));
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1190,7 +1316,12 @@ app.get('/api/devices/:deviceId/stats', authenticateToken, requirePermission(PER
 app.post('/api/devices/:deviceId/command', authenticateToken, requirePermission(PERMISSIONS.DEVICE_CONTROL), async (req, res) => {
   const { command, params = {} } = req.body;
   const { deviceId } = req.params;
-  
+
+  // 参数验证
+  if (!deviceId || deviceId === 'undefined' || deviceId === 'null') {
+    return res.status(400).json({ error: '无效的设备ID' });
+  }
+
   if (!onlineDevices.has(deviceId)) {
     return res.status(400).json({ error: '设备不在线' });
   }
@@ -2321,7 +2452,41 @@ async function startServer() {
       console.log(`🚀 服务器运行在 [::]:${PORT} (IPv4+IPv6)`);
       console.log(`📡 WebSocket服务已启动`);
       console.log(`📦 OTA固件目录: ${FIRMWARE_DIR}`);
+      console.log(`🔐 JWT_SECRET: ${JWT_SECRET}`);
     });
+
+// ========== 诊断接口（开发环境使用） ==========
+// 验证token的接口，用于排查前后端JWT_SECRET不一致问题
+// 支持两种方式：1) Authorization: Bearer token  2) ?token=xxx
+app.get('/api/auth/verify-token', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1] || req.query.token;
+  
+  console.log('🔍 /api/auth/verify-token 被调用');
+  console.log('   服务器JWT_SECRET:', JWT_SECRET);
+  console.log('   收到的Token:', token ? token.substring(0, 50) + '...' : '无');
+  console.log('   所有Query参数:', JSON.stringify(req.query));
+  
+  if (!token) {
+    return res.json({ valid: false, error: '未提供token', usage: '/api/auth/verify-token?token=xxx' });
+  }
+  
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return res.json({ valid: true, payload: decoded });
+  } catch (err) {
+    console.error('   ❌ Token验证失败:', err.message);
+    return res.json({ valid: false, error: err.message, hint: '如果提示"invalid signature"，说明前后端JWT_SECRET不一致' });
+  }
+});
+
+// 无需认证的设备列表接口（仅用于诊断）
+app.get('/api/diag/devices', (req, res) => {
+  console.log('🔍 /api/diag/devices 被调用');
+  console.log('   所有Headers:', JSON.stringify(req.headers));
+  res.json({ message: '诊断接口可以访问', headers: req.headers });
+});
+
   } catch (err) {
     console.error('❌ 数据库初始化失败:', err);
     process.exit(1);

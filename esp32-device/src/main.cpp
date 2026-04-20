@@ -5,6 +5,7 @@
 #include <NimBLEDevice.h>
 #include <Update.h>
 #include <HTTPClient.h>
+#include <SPIFFS.h>
 
 // ========== 设备配置 (修改这里适配你的设备) ==========
 // 设备类型: sensor(传感器), switch(开关), relay(继电器), gateway(网关), custom(自定义)
@@ -25,6 +26,11 @@ const char* MQTT_SERVER = "192.168.1.100";  // 修改为你的服务器IP
 const int MQTT_PORT = 1883;
 const char* MQTT_USER = "";                  // MQTT用户名(可选)
 const char* MQTT_PASS = "";                  // MQTT密码(可选)
+
+// ========== 设备认证令牌 (必须提供) ==========
+const char* AUTH_TOKEN = "";                 // JWT认证令牌 (必填)
+// 如果后端支持设备级认证，可以用设备ID作为用户名，令牌作为密码
+const bool USE_TOKEN_AUTH = true;            // 是否使用Token认证
 
 // ========== 蓝牙配网服务UUID ==========
 #define BLE_SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -52,6 +58,13 @@ bool otaInProgress = false;
 unsigned long otaProgress = 0;
 String otaVersion = "";
 unsigned long otaStartTime = 0;
+
+// ========== 运行时变量 ==========
+unsigned long bootTime = 0;
+unsigned long reconnectAttempts = 0;
+unsigned long lastHeartbeat = 0;
+unsigned long lastDataPublish = 0;
+bool provisioned = false;
 
 // 设备状态
 struct DeviceState {
@@ -321,31 +334,54 @@ void connectWiFi() {
 
 bool connectMQTT() {
     Serial.println("[MQTT] 连接服务器...");
-    
+
     String clientId = String(DEVICE_ID) + "-" + String(millis());
-    
+
     bool connected;
     if (strlen(MQTT_USER) > 0) {
         connected = mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS);
     } else {
         connected = mqttClient.connect(clientId.c_str());
     }
-    
+
     if (connected) {
         Serial.println("[MQTT] 连接成功!");
-        
+
+        // ========== Token 认证 ==========
+        if (USE_TOKEN_AUTH && strlen(AUTH_TOKEN) > 0) {
+            Serial.println("[MQTT] 发送认证令牌...");
+
+            StaticJsonDocument<256> authDoc;
+            authDoc["device_id"] = DEVICE_ID;
+            authDoc["token"] = AUTH_TOKEN;
+
+            char authPayload[512];
+            serializeJson(authDoc, authPayload);
+
+            String authTopic = "device/" + String(DEVICE_ID) + "/auth";
+            mqttClient.publish(authTopic.c_str(), authPayload);
+
+            Serial.printf("[MQTT] 认证请求已发送: %s\n", authPayload);
+        } else if (strlen(AUTH_TOKEN) == 0) {
+            Serial.println("[MQTT] 警告: 未配置认证令牌!");
+        }
+
         // 订阅命令主题
         String commandTopic = String("device/") + DEVICE_ID + "/command";
         mqttClient.subscribe(commandTopic.c_str());
         Serial.printf("[MQTT] 已订阅: %s\n", commandTopic.c_str());
-        
+
         // 订阅WiFi配置主题
         String wifiConfigTopic = String("device/") + DEVICE_ID + "/config/wifi";
         mqttClient.subscribe(wifiConfigTopic.c_str());
-        
+
+        // 订阅认证响应主题
+        String authRespTopic = String("device/") + DEVICE_ID + "/auth/response";
+        mqttClient.subscribe(authRespTopic.c_str());
+
         // 发布上线状态
         publishStatus();
-        
+
         return true;
     } else {
         Serial.printf("[MQTT] 连接失败，错误码: %d\n", mqttClient.state());
@@ -422,20 +458,41 @@ void handleMQTTMessage(char* topic, byte* payload, unsigned int length) {
     char message[length + 1];
     memcpy(message, payload, length);
     message[length] = '\0';
-    
+
     Serial.printf("[MQTT] 收到消息 [%s]: %s\n", topic, message);
-    
-    // 提取命令
+
+    // ========== 检查是否是认证响应 ==========
+    String topicStr = String(topic);
+    String authRespTopic = String("device/") + DEVICE_ID + "/auth/response";
+
+    if (topicStr.endsWith("/auth/response")) {
+        StaticJsonDocument<256> respDoc;
+        DeserializationError error = deserializeJson(respDoc, message);
+
+        if (!error) {
+            bool authSuccess = respDoc["success"] | false;
+            const char* msg = respDoc["message"] | "";
+
+            if (authSuccess) {
+                Serial.println("[AUTH] 认证成功!");
+            } else {
+                Serial.printf("[AUTH] 认证失败: %s\n", msg);
+            }
+        }
+        return;  // 认证响应不需要继续处理
+    }
+
+    // ========== 解析命令 ==========
     StaticJsonDocument<256> doc;
     DeserializationError error = deserializeJson(doc, message);
-    
+
     if (error) {
         Serial.println("[MQTT] JSON解析失败");
         return;
     }
-    
+
     const char* cmd = doc["command"];
-    
+
     if (cmd == nullptr) {
         Serial.println("[MQTT] 无效命令");
         return;

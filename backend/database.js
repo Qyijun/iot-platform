@@ -713,6 +713,60 @@ class Database {
     );
   }
 
+  // 获取设备的最新一条数据
+  getLatestDeviceData(deviceId) {
+    return new Promise((resolve, reject) => {
+      const sql = `SELECT * FROM device_data WHERE device_id = ? ORDER BY created_at DESC LIMIT 1`;
+
+      if (this.config.type === 'postgresql') {
+        this.db.query(sql, [deviceId]).then(res => {
+          if (res.rows.length > 0) {
+            const row = res.rows[0];
+            this._parseDataValue(row, resolve, reject);
+          } else {
+            resolve(null);
+          }
+        }).catch(reject);
+      } else if (this.config.type === 'mysql') {
+        this.db.query(sql, [deviceId]).then(res => {
+          if (res[0].length > 0) {
+            const row = res[0][0];
+            this._parseDataValue(row, resolve, reject);
+          } else {
+            resolve(null);
+          }
+        }).catch(reject);
+      } else {
+        // SQLite
+        this.db.get(sql, [deviceId], (err, row) => {
+          if (err) reject(err);
+          else if (row) {
+            this._parseDataValue(row, resolve, reject);
+          } else {
+            resolve(null);
+          }
+        });
+      }
+    });
+  }
+
+  // 辅助方法：解析 data_value 字段
+  _parseDataValue(row, resolve, reject) {
+    try {
+      if (typeof row.data_value === 'string') {
+        try {
+          resolve(JSON.parse(row.data_value));
+        } catch {
+          resolve(row.data_value);
+        }
+      } else {
+        resolve(row.data_value);
+      }
+    } catch (e) {
+      resolve(row.data_value);
+    }
+  }
+
   // 按时间范围获取设备数据（用于图表）
   getDeviceDataByTimeRange(deviceId, startTime, endTime) {
     const isMySQL = this.config.type === 'mysql';
