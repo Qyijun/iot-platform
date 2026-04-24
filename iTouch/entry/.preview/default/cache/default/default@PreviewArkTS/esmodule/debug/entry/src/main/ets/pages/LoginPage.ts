@@ -110,9 +110,35 @@ class LoginPage extends ViewPU {
         // Logo区域
         Column.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
+            // 顶部设置按钮
+            Row.create();
+            Row.debugLine("entry/src/main/ets/pages/LoginPage.ets(37:7)", "entry");
+            // 顶部设置按钮
+            Row.width('85%');
+            // 顶部设置按钮
+            Row.margin({ top: 20 });
+        }, Row);
+        this.observeComponentCreation2((elmtId, isInitialRender) => {
+            Blank.create();
+            Blank.debugLine("entry/src/main/ets/pages/LoginPage.ets(38:9)", "entry");
+        }, Blank);
+        Blank.pop();
+        this.observeComponentCreation2((elmtId, isInitialRender) => {
+            Text.create('⚙️ 服务器设置');
+            Text.debugLine("entry/src/main/ets/pages/LoginPage.ets(39:9)", "entry");
+            Text.fontSize(14);
+            Text.fontColor('#1890ff');
+            Text.onClick(() => {
+                router.pushUrl({ url: 'pages/ServerSettings' });
+            });
+        }, Text);
+        Text.pop();
+        // 顶部设置按钮
+        Row.pop();
+        this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 登录表单
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/LoginPage.ets(38:7)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/LoginPage.ets(49:7)", "entry");
             // 登录表单
             Column.width('85%');
             // 登录表单
@@ -131,7 +157,7 @@ class LoginPage extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             TextInput.create({ placeholder: '请输入用户名' });
-            TextInput.debugLine("entry/src/main/ets/pages/LoginPage.ets(39:9)", "entry");
+            TextInput.debugLine("entry/src/main/ets/pages/LoginPage.ets(50:9)", "entry");
             TextInput.width('100%');
             TextInput.height(48);
             TextInput.backgroundColor('#f5f5f5');
@@ -143,7 +169,7 @@ class LoginPage extends ViewPU {
         }, TextInput);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             TextInput.create({ placeholder: '请输入密码' });
-            TextInput.debugLine("entry/src/main/ets/pages/LoginPage.ets(49:9)", "entry");
+            TextInput.debugLine("entry/src/main/ets/pages/LoginPage.ets(60:9)", "entry");
             TextInput.width('100%');
             TextInput.height(48);
             TextInput.backgroundColor('#f5f5f5');
@@ -156,7 +182,7 @@ class LoginPage extends ViewPU {
         }, TextInput);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Button.createWithLabel('登 录');
-            Button.debugLine("entry/src/main/ets/pages/LoginPage.ets(60:9)", "entry");
+            Button.debugLine("entry/src/main/ets/pages/LoginPage.ets(71:9)", "entry");
             Button.width('100%');
             Button.height(48);
             Button.fontSize(16);

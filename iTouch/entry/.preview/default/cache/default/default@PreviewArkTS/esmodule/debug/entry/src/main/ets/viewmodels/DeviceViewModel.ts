@@ -38,6 +38,11 @@ export class DeviceViewModel {
         }
     }
     async loadDevice(id: string): Promise<Device | null> {
+        // 参数验证
+        if (!id || id === 'undefined' || id === 'null' || id.length === 0) {
+            console.error('=== loadDevice: 无效的设备ID ===');
+            return null;
+        }
         try {
             const res = await httpService.getDevice(id) as any;
             console.info('=== loadDevice 响应:', JSON.stringify(res).substring(0, 500));
@@ -66,6 +71,11 @@ export class DeviceViewModel {
         }
     }
     async loadDeviceData(id: string): Promise<DeviceData | null> {
+        // 参数验证
+        if (!id || id === 'undefined' || id === 'null' || id.length === 0) {
+            console.error('=== loadDeviceData: 无效的设备ID ===');
+            return null;
+        }
         try {
             const res = await httpService.getDeviceData(id) as any;
             console.info('=== loadDeviceData 响应:', JSON.stringify(res).substring(0, 500));
@@ -89,6 +99,12 @@ export class DeviceViewModel {
         }
     }
     async sendCommand(deviceId: string, command: string, params?: Record<string, Object>): Promise<boolean> {
+        // 参数验证
+        if (!deviceId || deviceId === 'undefined' || deviceId === 'null' || deviceId.length === 0) {
+            console.error('=== sendCommand: 无效的设备ID ===');
+            promptAction.showToast({ message: '设备ID无效' });
+            return false;
+        }
         try {
             const res = await httpService.sendCommand(deviceId, command, params);
             const resObj = res as Record<string, Object>;
@@ -109,6 +125,12 @@ export class DeviceViewModel {
         name?: string;
         location?: string;
     }): Promise<boolean> {
+        // 参数验证
+        if (!deviceId || deviceId === 'undefined' || deviceId === 'null' || deviceId.length === 0) {
+            console.error('=== updateDevice: 无效的设备ID ===');
+            promptAction.showToast({ message: '设备ID无效' });
+            return false;
+        }
         try {
             const res = await httpService.updateDevice(deviceId, params);
             const resObj = res as Record<string, Object>;
@@ -126,6 +148,12 @@ export class DeviceViewModel {
         }
     }
     async deleteDevice(deviceId: string): Promise<boolean> {
+        // 参数验证
+        if (!deviceId || deviceId === 'undefined' || deviceId === 'null' || deviceId.length === 0) {
+            console.error('=== deleteDevice: 无效的设备ID ===');
+            promptAction.showToast({ message: '设备ID无效' });
+            return false;
+        }
         try {
             const res = await httpService.deleteDevice(deviceId);
             const resObj = res as Record<string, Object>;
@@ -145,11 +173,17 @@ export class DeviceViewModel {
     async loadAlerts(): Promise<Record<string, Object>[]> {
         try {
             const res = await httpService.getAlerts() as any;
+            console.info('=== loadAlerts 响应:', JSON.stringify(res).substring(0, 500));
+            // 兼容多种返回格式
             if (Array.isArray(res)) {
                 return res;
             }
             if (res.code === 0 || res.success) {
                 return (res.data as Record<string, Object>[]) || [];
+            }
+            // 后端返回 { alerts: [...] } 格式
+            if (res.alerts && Array.isArray(res.alerts)) {
+                return res.alerts;
             }
             return [];
         }

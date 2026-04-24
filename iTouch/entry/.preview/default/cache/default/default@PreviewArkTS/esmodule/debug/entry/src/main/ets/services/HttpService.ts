@@ -213,6 +213,16 @@ export class HttpService {
         return !!this._token;
     }
     async request<T>(url: string, options: RequestOptions = {}): Promise<T> {
+        // URL 验证 - 防止无效URL导致网络错误
+        if (!url || url === 'undefined' || url === 'null' || url.length === 0) {
+            hilog.error(DOMAIN, TAG, 'HttpService: 无效的URL，拒绝请求');
+            return Promise.reject(new Error('无效的请求URL')) as Promise<T>;
+        }
+        // 检查URL中是否有无效的参数占位符
+        if (url.includes('undefined') || url.includes('null') || url.includes('//')) {
+            hilog.error(DOMAIN, TAG, 'HttpService: URL包含无效值: %{public}s', url);
+            return Promise.reject(new Error('请求URL包含无效值')) as Promise<T>;
+        }
         // 等待 Preferences 初始化完成
         hilog.info(DOMAIN, TAG, '=== request: 开始请求, url=%{public}s ===', url);
         hilog.info(DOMAIN, TAG, '=== request: preferencesReady=%{public}s ===', String(preferencesReady));
@@ -334,6 +344,14 @@ export class HttpService {
     async getDeviceData(id: string): Promise<any> {
         return this.request(`/api/devices/${id}/data`);
     }
+    // 获取在线设备（包含已入库和未入库）
+    async getOnlineDevices(): Promise<any> {
+        return this.request('/api/devices/online');
+    }
+    // 发现未入库的在线设备
+    async discoverDevices(): Promise<any> {
+        return this.request('/api/devices/discover');
+    }
     // 发送设备控制命令
     async sendCommand(deviceId: string, command: string, params?: Record<string, Object>): Promise<Object> {
         return this.request(`/api/devices/${deviceId}/command`, {
@@ -344,6 +362,12 @@ export class HttpService {
     // 获取告警列表
     async getAlerts(): Promise<Object> {
         return this.request('/api/alerts');
+    }
+    // 标记告警为已读
+    async markAlertRead(alertId: string): Promise<Object> {
+        return this.request(`/api/alerts/${alertId}/read`, {
+            method: http.RequestMethod.PUT
+        });
     }
     // 获取用户信息
     async getUserInfo(): Promise<Object> {

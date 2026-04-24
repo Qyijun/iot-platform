@@ -419,6 +419,36 @@ class Database {
         added_at DATETIME DEFAULT ${dtNow},
         UNIQUE(group_id, device_id)
       )`,
+      
+      // 告警表
+      `CREATE TABLE IF NOT EXISTS alerts (
+        id INTEGER PRIMARY KEY ${ai},
+        alert_type VARCHAR(32) NOT NULL,
+        alert_level VARCHAR(16) NOT NULL DEFAULT 'info',
+        device_id VARCHAR(64),
+        device_name VARCHAR(128),
+        message TEXT NOT NULL,
+        details TEXT,
+        is_read INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT ${dtNow}
+      )`,
+
+      // 摄像头表（视频监控）
+      `CREATE TABLE IF NOT EXISTS cameras (
+        id INTEGER PRIMARY KEY ${ai},
+        camera_id VARCHAR(64) UNIQUE NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        ip VARCHAR(45) NOT NULL,
+        port INTEGER DEFAULT 554,
+        username VARCHAR(64) DEFAULT 'admin',
+        password VARCHAR(128),
+        location VARCHAR(128),
+        rtsp_path VARCHAR(256) DEFAULT '/Streaming/Channels/101',
+        status VARCHAR(32) DEFAULT 'offline',
+        enabled INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT ${dtNow},
+        updated_at DATETIME DEFAULT ${dtNow}
+      )`,
     ];
 
     for (const sql of tables) {
@@ -821,6 +851,68 @@ class Database {
       `INSERT INTO user_logs (user_id, username, action, detail, ip_address) VALUES (?, ?, ?, ?, ?)`,
       [userId, username, action, detail, ipAddress]
     );
+  }
+
+  // ============ 告警相关 ============
+  // 添加告警
+  addAlert(alertType, alertLevel, deviceId, deviceName, message, details = null) {
+    return this.run(
+      `INSERT INTO alerts (alert_type, alert_level, device_id, device_name, message, details) VALUES (?, ?, ?, ?, ?, ?)`,
+      [alertType, alertLevel, deviceId, deviceName, message, details ? JSON.stringify(details) : null]
+    );
+  }
+
+  // 获取告警列表
+  getAlerts(limit = 50, offset = 0, options = {}) {
+    let sql = `SELECT * FROM alerts WHERE 1=1`;
+    const params = [];
+    
+    if (options.deviceId) {
+      sql += ` AND device_id = ?`;
+      params.push(options.deviceId);
+    }
+    if (options.alertType) {
+      sql += ` AND alert_type = ?`;
+      params.push(options.alertType);
+    }
+    if (options.alertLevel) {
+      sql += ` AND alert_level = ?`;
+      params.push(options.alertLevel);
+    }
+    if (options.isRead !== undefined) {
+      sql += ` AND is_read = ?`;
+      params.push(options.isRead ? 1 : 0);
+    }
+    
+    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+    
+    return this.all(sql, params);
+  }
+
+  // 获取未读告警数量
+  getUnreadAlertCount() {
+    return this.get(`SELECT COUNT(*) as count FROM alerts WHERE is_read = 0`);
+  }
+
+  // 标记告警为已读
+  markAlertAsRead(alertId) {
+    return this.run(`UPDATE alerts SET is_read = 1 WHERE id = ?`, [alertId]);
+  }
+
+  // 标记所有告警为已读
+  markAllAlertsAsRead() {
+    return this.run(`UPDATE alerts SET is_read = 1 WHERE is_read = 0`);
+  }
+
+  // 删除告警
+  deleteAlert(alertId) {
+    return this.run(`DELETE FROM alerts WHERE id = ?`, [alertId]);
+  }
+
+  // 清空告警
+  clearAlerts() {
+    return this.run(`DELETE FROM alerts`);
   }
 
   getUserLogs(limit = 100, offset = 0, action = null, startDate = null, endDate = null) {
@@ -1344,12 +1436,88 @@ class Database {
     }
   }
 
+  // ============ 摄像头管理（视频监控） ============
+
+  // 获取所有摄像头
+  async getAllCameras() {
+    try {
+      return await this.all(`SELECT * FROM cameras ORDER BY created_at DESC`);
+    } catch (err) {
+      console.error('获取摄像头列表失败:', err);
+      return [];
+    }
+  }
+
+  // 根据ID获取摄像头
+  async getCameraById(cameraId) {
+    try {
+      return await this.get(`SELECT * FROM cameras WHERE camera_id = ?`, [cameraId]);
+    } catch (err) {
+      console.error('获取摄像头失败:', err);
+      return null;
+    }
+  }
+
+  // 添加摄像头
+  async createCamera(cameraId, name, ip, port, username, password, location, rtspPath) {
+    try {
+      await this.run(
+        `INSERT INTO cameras (camera_id, name, ip, port, username, password, location, rtsp_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cameraId, name, ip, port || 554, username || 'admin', password || '', location || '', rtspPath || '/Streaming/Channels/101']
+      );
+      return await this.getCameraById(cameraId);
+    } catch (err) {
+      console.error('创建摄像头失败:', err);
+      throw err;
+    }
+  }
+
+  // 更新摄像头
+  async updateCamera(cameraId, updates) {
+    const fields = [];
+    const values = [];
+
+    if (updates.name !== undefined) { fields.push('name = ?'); values.push(updates.name); }
+    if (updates.ip !== undefined) { fields.push('ip = ?'); values.push(updates.ip); }
+    if (updates.port !== undefined) { fields.push('port = ?'); values.push(updates.port); }
+    if (updates.username !== undefined) { fields.push('username = ?'); values.push(updates.username); }
+    if (updates.password !== undefined) { fields.push('password = ?'); values.push(updates.password); }
+    if (updates.location !== undefined) { fields.push('location = ?'); values.push(updates.location); }
+    if (updates.rtsp_path !== undefined) { fields.push('rtsp_path = ?'); values.push(updates.rtsp_path); }
+    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
+    if (updates.enabled !== undefined) { fields.push('enabled = ?'); values.push(updates.enabled ? 1 : 0); }
+
+    if (fields.length === 0) return null;
+
+    fields.push(`updated_at = ${this.now()}`);
+    values.push(cameraId);
+
+    try {
+      await this.run(`UPDATE cameras SET ${fields.join(', ')} WHERE camera_id = ?`, values);
+      return await this.getCameraById(cameraId);
+    } catch (err) {
+      console.error('更新摄像头失败:', err);
+      throw err;
+    }
+  }
+
+  // 删除摄像头
+  async deleteCamera(cameraId) {
+    try {
+      const result = await this.run(`DELETE FROM cameras WHERE camera_id = ?`, [cameraId]);
+      return result.changes > 0;
+    } catch (err) {
+      console.error('删除摄像头失败:', err);
+      return false;
+    }
+  }
+
   async resetDatabase() {
     // 删除所有表并重新创建
     const dropTables = [
       'ota_logs', 'system_config', 'command_logs', 'verification_codes',
       'user_roles', 'role_permissions', 'permissions', 'roles', 'users',
-      'device_data', 'devices'
+      'device_data', 'devices', 'alerts', 'device_groups', 'device_group_members', 'cameras'
     ];
 
     for (const table of dropTables) {

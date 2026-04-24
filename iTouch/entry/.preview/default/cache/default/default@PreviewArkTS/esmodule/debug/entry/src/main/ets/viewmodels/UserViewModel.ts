@@ -41,7 +41,11 @@ export class UserViewModel {
                 console.info('>>> login: httpService.hasToken() =', httpService.hasToken(), '<<<');
                 // 连接 WebSocket
                 try {
-                    webSocketService.connect(token);
+                    const baseUrl = httpService.getBaseUrl();
+                    console.info('WebSocket初始化: ' + baseUrl);
+                    webSocketService.init(baseUrl);
+                    webSocketService.setToken(token);
+                    webSocketService.connect();
                 }
                 catch (e) {
                     console.error('WebSocket连接失败:', e);

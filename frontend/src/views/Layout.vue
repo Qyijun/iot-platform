@@ -48,7 +48,13 @@
           <el-icon><Monitor /></el-icon>
           <template #title>蓝牙配网</template>
         </el-menu-item>
-        
+
+        <!-- 视频监控页面 -->
+        <el-menu-item index="/video">
+          <el-icon><VideoCamera /></el-icon>
+          <template #title>视频监控</template>
+        </el-menu-item>
+
         <!-- 用户管理子菜单 -->
         <el-sub-menu v-if="menuPerms.user" index="/user-manage">
           <template #title>
@@ -213,7 +219,8 @@ import {
   Expand,
   MoreFilled,
   HomeFilled,
-  Document
+  Document,
+  VideoCamera
 } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { useWebSocketStore } from '../stores/websocket'

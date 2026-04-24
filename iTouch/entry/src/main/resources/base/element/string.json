@@ -15,6 +15,14 @@
     {
       "name": "EntryAbility_label",
       "value": "iTouch"
+    },
+    {
+      "name": "location_permission_reason",
+      "value": "蓝牙扫描需要位置权限才能发现周围的蓝牙设备"
+    },
+    {
+      "name": "bluetooth_permission_reason",
+      "value": "蓝牙权限用于扫描和连接蓝牙设备"
     }
   ]
 }

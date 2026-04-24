@@ -28,6 +28,7 @@ const { v4: uuidv4 } = require('uuid');
 const Database = require('./database');
 const { PERMISSIONS } = require('./database');
 const ProtocolAdapter = require('./protocol-adapter');
+const onvifApi = require('./onvif-api');
 
 // 尝试加载蓝牙服务（如果串口库可用）
 let BLEService = null;
@@ -172,6 +173,10 @@ const limiter = rateLimit({
   max: 500,  // 5分钟内最多500个请求
 });
 app.use('/api/', limiter);
+
+// ============ ONVIF 视频服务 API ============
+// 视频监控路由（家庭监控项目）
+app.use('/api/video', onvifApi);
 
 // JWT验证中间件 - 支持Authorization header和query参数
 const authenticateToken = async (req, res, next) => {
@@ -326,6 +331,10 @@ mqttClient.on('message', async (topic, message) => {
   }
   
   switch (messageType) {
+    case 'command':
+      // 处理命令响应
+      await handleCommandResponse(deviceId, data);
+      break;
     case 'status':
       await handleDeviceStatus(deviceId, data);
       break;
@@ -385,6 +394,10 @@ async function handleDeviceStatus(deviceId, data) {
     await db.updateDeviceStatus(deviceId, 'online', ip);
     console.log(`📱 设备上线: ${deviceId}`);
     
+    // 获取设备名称
+    const deviceInfo = await db.getDeviceById(deviceId);
+    const deviceName = deviceInfo?.name || `设备_${deviceId.slice(-6)}`;
+    
     // 防抖：2分钟内不重复记录上线日志（避免网络波动导致频繁上线预警）
     const now = Date.now();
     const lastOnline = deviceOnlineCache.get(deviceId) || 0;
@@ -392,6 +405,19 @@ async function handleDeviceStatus(deviceId, data) {
       deviceOnlineCache.set(deviceId, now);
       // 记录设备上线日志（系统自动记录，用户ID为null）
       db.addUserLog(null, 'system', 'device_online', `设备 ${deviceId} 上线`, ip);
+      
+      // 创建上线告警并推送
+      const alert = {
+        alert_type: 'device_online',
+        alert_level: 'info',
+        device_id: deviceId,
+        device_name: deviceName,
+        message: `设备 "${deviceName}" 已上线`,
+        details: { ip: ip, version: version }
+      };
+      await db.addAlert(alert.alert_type, alert.alert_level, alert.device_id, alert.device_name, alert.message, alert.details);
+      broadcastToClients(alert);
+      console.log(`🔔 设备上线告警已推送: ${deviceName}`);
     }
   } else {
     // 检查设备是否真的在线过，避免重复记录
@@ -400,6 +426,10 @@ async function handleDeviceStatus(deviceId, data) {
       await db.updateDeviceStatus(deviceId, 'offline');
       console.log(`📴 设备离线: ${deviceId}`);
       
+      // 获取设备名称
+      const deviceInfo = await db.getDeviceById(deviceId);
+      const deviceName = deviceInfo?.name || `设备_${deviceId.slice(-6)}`;
+      
       // 防抖：2分钟内不重复记录离线日志
       const now = Date.now();
       const lastOffline = deviceOfflineCache.get(deviceId) || 0;
@@ -407,6 +437,19 @@ async function handleDeviceStatus(deviceId, data) {
         deviceOfflineCache.set(deviceId, now);
         // 记录设备离线日志
         db.addUserLog(null, 'system', 'device_offline', `设备 ${deviceId} 离线`, null);
+        
+        // 创建离线告警并推送（离线是警告级别）
+        const alert = {
+          alert_type: 'device_offline',
+          alert_level: 'warning',
+          device_id: deviceId,
+          device_name: deviceName,
+          message: `设备 "${deviceName}" 已离线`,
+          details: {}
+        };
+        await db.addAlert(alert.alert_type, alert.alert_level, alert.device_id, alert.device_name, alert.message, alert.details);
+        broadcastToClients(alert);
+        console.log(`🔔 设备离线告警已推送: ${deviceName}`);
       }
     }
   }
@@ -477,6 +520,41 @@ function handleBluetoothConfig(deviceId, data) {
   // 处理蓝牙配网后的WiFi配置
 }
 
+// 处理命令响应
+async function handleCommandResponse(deviceId, data) {
+  const { command, success, error, result } = data;
+  const device = await db.getDeviceById(deviceId);
+  const deviceName = device?.name || `设备_${deviceId.slice(-6)}`;
+  
+  if (success) {
+    console.log(`✅ 命令执行成功 [${deviceId}]: ${command}`);
+    // 创建成功告警
+    const alert = {
+      alert_type: 'command_success',
+      alert_level: 'success',
+      device_id: deviceId,
+      device_name: deviceName,
+      message: `设备 "${deviceName}" 命令 "${command}" 执行成功`,
+      details: { command, result }
+    };
+    await db.addAlert(alert.alert_type, alert.alert_level, alert.device_id, alert.device_name, alert.message, alert.details);
+    broadcastToClients(alert);
+  } else {
+    console.log(`❌ 命令执行失败 [${deviceId}]: ${command} - ${error}`);
+    // 创建失败告警
+    const alert = {
+      alert_type: 'command_failed',
+      alert_level: 'error',
+      device_id: deviceId,
+      device_name: deviceName,
+      message: `设备 "${deviceName}" 命令 "${command}" 执行失败: ${error || '未知错误'}`,
+      details: { command, error }
+    };
+    await db.addAlert(alert.alert_type, alert.alert_level, alert.device_id, alert.device_name, alert.message, alert.details);
+    broadcastToClients(alert);
+  }
+}
+
 // ============ WebSocket 处理 ============
 
 wss.on('connection', (ws, req) => {
@@ -539,16 +617,24 @@ async function handleWebSocketMessage(clientId, data) {
 
 function broadcastToClients(message) {
   const messageStr = JSON.stringify(message);
+  const targetDeviceId = message.deviceId || message.device_id;
+  console.log(`📡 广播消息: type=${message.alert_type || message.type}, deviceId=${targetDeviceId}, 客户端数=${wsClients.size}`);
+  
   wsClients.forEach((client, clientId) => {
     if (client.ws.readyState === WebSocket.OPEN) {
       // 如果有订阅，只发送给订阅了该设备的客户端
-      if (message.deviceId && client.subscriptions.size > 0) {
-        if (client.subscriptions.has(message.deviceId)) {
+      // 兼容 deviceId（驼峰）和 device_id（下划线）两种格式
+      if (targetDeviceId && client.subscriptions.size > 0) {
+        if (client.subscriptions.has(targetDeviceId)) {
           client.ws.send(messageStr);
+          console.log(`  → 发送给客户端 ${clientId} (订阅匹配)`);
         }
       } else {
         client.ws.send(messageStr);
+        console.log(`  → 推送给客户端 ${clientId} (无订阅/全局推送)`);
       }
+    } else {
+      console.log(`  ✗ 客户端 ${clientId} 未连接`);
     }
   });
 }
@@ -621,6 +707,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const user = await db.getUserWithRoles(req.user.userId);
     const email = await db.getConfig(`user_email_${user.id}`);
+    const phone = await db.getConfig(`user_phone_${user.id}`);
     res.json({
       id: user.id,
       username: user.username,
@@ -628,6 +715,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       roles: user.roles,
       permissions: user.permissions,
       email: email,
+      phone: phone,
       created_at: user.created_at
     });
   } catch (err) {
@@ -656,6 +744,59 @@ app.put('/api/auth/email', authenticateToken, async (req, res) => {
     res.json({ success: true, message: '邮箱已更新' });
   } catch (err) {
     console.error('更新邮箱错误:', err);
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
+// 更新当前用户资料（昵称等）
+app.put('/api/auth/profile', authenticateToken, async (req, res) => {
+  const { displayName, email, phone } = req.body;
+  
+  try {
+    // 更新显示名称
+    if (displayName !== undefined && displayName !== null) {
+      if (displayName.length > 50) {
+        return res.status(400).json({ error: '昵称不能超过50个字符' });
+      }
+      await db.updateUserDisplayName(req.user.userId, displayName.trim());
+    }
+    
+    // 更新邮箱
+    if (email !== undefined && email !== null) {
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: '邮箱格式不正确' });
+      }
+      await db.setConfig(`user_email_${req.user.userId}`, email || '');
+    }
+    
+    // 更新手机号
+    if (phone !== undefined && phone !== null) {
+      if (phone && !/^1[3-9]\d{9}$/.test(phone)) {
+        return res.status(400).json({ error: '手机号格式不正确' });
+      }
+      await db.setConfig(`user_phone_${req.user.userId}`, phone || '');
+    }
+    
+    // 获取更新后的用户信息
+    const user = await db.getUserWithRoles(req.user.userId);
+    const userEmail = await db.getConfig(`user_email_${user.id}`);
+    const userPhone = await db.getConfig(`user_phone_${user.id}`);
+    
+    res.json({
+      success: true,
+      message: '资料已更新',
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.display_name || user.username,
+        email: userEmail,
+        phone: userPhone,
+        roles: user.roles,
+        permissions: user.permissions
+      }
+    });
+  } catch (err) {
+    console.error('更新用户资料错误:', err);
     res.status(500).json({ error: '服务器错误' });
   }
 });
@@ -1025,6 +1166,154 @@ app.get('/api/devices/:deviceId', authenticateToken, requirePermission(PERMISSIO
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ============ 设备命令控制 ============
+
+// 发送设备命令
+app.post('/api/devices/:deviceId/command', authenticateToken, requirePermission(PERMISSIONS.DEVICE_CONTROL), async (req, res) => {
+  const { deviceId } = req.params;
+  const { command, ...params } = req.body;
+  
+  if (!command) {
+    return res.status(400).json({ error: '缺少命令参数' });
+  }
+  
+  try {
+    // 检查设备是否存在
+    const device = await db.getDeviceById(deviceId);
+    if (!device) {
+      return res.status(404).json({ error: '设备不存在' });
+    }
+    
+    const deviceName = device.name || `设备_${deviceId.slice(-6)}`;
+    
+    // 检查设备是否在线
+    if (!onlineDevices.has(deviceId)) {
+      // 设备不在线，创建失败告警
+      const alert = {
+        alert_type: 'command_failed',
+        alert_level: 'error',
+        device_id: deviceId,
+        device_name: deviceName,
+        message: `命令 "${command}" 发送失败：设备离线`,
+        details: { command, params }
+      };
+      await db.addAlert(alert.alert_type, alert.alert_level, alert.device_id, alert.device_name, alert.message, alert.details);
+      broadcastToClients(alert);
+      
+      return res.status(400).json({ 
+        success: false, 
+        error: '设备离线，命令发送失败',
+        alert: alert
+      });
+    }
+    
+    // 通过MQTT发送命令
+    const commandPayload = JSON.stringify({ command, ...params });
+    mqttClient.publish(`device/${deviceId}/command`, commandPayload, { qos: 1 });
+    
+    console.log(`📤 命令已发送 [${deviceId}]: ${command}`, params);
+    
+    // 记录命令日志
+    await db.run(
+      `INSERT INTO command_logs (device_id, command, params) VALUES (?, ?, ?)`,
+      [deviceId, command, JSON.stringify(params)]
+    );
+    
+    // 记录用户操作日志
+    db.addUserLog(req.user.userId, req.user.username, 'command_sent', `发送命令 ${command} 到 ${deviceName}`, req.ip);
+    
+    // 立即返回成功（命令已发送，等待设备响应）
+    res.json({ 
+      success: true, 
+      message: '命令已发送',
+      command,
+      params 
+    });
+  } catch (err) {
+    console.error(`命令发送失败 [${deviceId}]:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============ 告警管理 ============
+
+// 获取告警列表
+app.get('/api/alerts', authenticateToken, requirePermission(PERMISSIONS.DEVICE_VIEW), async (req, res) => {
+  try {
+    const { page = 1, limit = 50, deviceId, alertType, alertLevel, isRead } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    const options = {};
+    if (deviceId) options.deviceId = deviceId;
+    if (alertType) options.alertType = alertType;
+    if (alertLevel) options.alertLevel = alertLevel;
+    if (isRead !== undefined) options.isRead = isRead === 'true';
+    
+    const alerts = await db.getAlerts(parseInt(limit), offset, options);
+    const unreadCount = await db.getUnreadAlertCount();
+    
+    res.json({
+      alerts,
+      unreadCount: unreadCount?.count || 0,
+      page: parseInt(page),
+      limit: parseInt(limit)
+    });
+  } catch (err) {
+    console.error('获取告警列表错误:', err);
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
+// 获取未读告警数量
+app.get('/api/alerts/unread-count', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.getUnreadAlertCount();
+    res.json({ count: result?.count || 0 });
+  } catch (err) {
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
+// 标记告警为已读
+app.put('/api/alerts/:alertId/read', authenticateToken, async (req, res) => {
+  try {
+    await db.markAlertAsRead(req.params.alertId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
+// 标记所有告警为已读
+app.put('/api/alerts/read-all', authenticateToken, async (req, res) => {
+  try {
+    await db.markAllAlertsAsRead();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
+// 删除告警
+app.delete('/api/alerts/:alertId', authenticateToken, async (req, res) => {
+  try {
+    await db.deleteAlert(req.params.alertId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
+// 清空所有告警
+app.delete('/api/alerts', authenticateToken, async (req, res) => {
+  try {
+    await db.clearAlerts();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '服务器错误' });
   }
 });
 

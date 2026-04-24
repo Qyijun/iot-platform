@@ -181,11 +181,18 @@ export class DeviceViewModel {
   async loadAlerts(): Promise<Record<string, Object>[]> {
     try {
       const res = await httpService.getAlerts() as any;
+      console.info('=== loadAlerts 响应:', JSON.stringify(res).substring(0, 500));
+      
+      // 兼容多种返回格式
       if (Array.isArray(res)) {
         return res;
       }
       if (res.code === 0 || res.success) {
         return (res.data as Record<string, Object>[]) || [];
+      }
+      // 后端返回 { alerts: [...] } 格式
+      if (res.alerts && Array.isArray(res.alerts)) {
+        return res.alerts;
       }
       return [];
     } catch (e) {

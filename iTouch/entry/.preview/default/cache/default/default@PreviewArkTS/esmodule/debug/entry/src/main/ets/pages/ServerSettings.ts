@@ -115,7 +115,7 @@ class ServerSettings extends ViewPU {
     initialRender() {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(47:5)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(48:5)", "entry");
             Column.width('100%');
             Column.height('100%');
             Column.backgroundColor('#f0f2f5');
@@ -123,7 +123,7 @@ class ServerSettings extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 顶部导航
             Row.create();
-            Row.debugLine("entry/src/main/ets/pages/ServerSettings.ets(49:7)", "entry");
+            Row.debugLine("entry/src/main/ets/pages/ServerSettings.ets(50:7)", "entry");
             // 顶部导航
             Row.width('100%');
             // 顶部导航
@@ -135,14 +135,14 @@ class ServerSettings extends ViewPU {
         }, Row);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('<');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(50:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(51:9)", "entry");
             Text.fontSize(24);
             Text.onClick(() => router.back());
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('服务器设置');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(54:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(55:9)", "entry");
             Text.fontSize(18);
             Text.fontWeight(FontWeight.Medium);
             Text.layoutWeight(1);
@@ -150,7 +150,7 @@ class ServerSettings extends ViewPU {
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(59:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(60:9)", "entry");
             Text.width(24);
         }, Text);
         Text.pop();
@@ -158,18 +158,18 @@ class ServerSettings extends ViewPU {
         Row.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Scroll.create();
-            Scroll.debugLine("entry/src/main/ets/pages/ServerSettings.ets(67:7)", "entry");
+            Scroll.debugLine("entry/src/main/ets/pages/ServerSettings.ets(68:7)", "entry");
             Scroll.layoutWeight(1);
         }, Scroll);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(68:9)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(69:9)", "entry");
             Column.padding(16);
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 说明文字
             Text.create('配置后端服务器地址，用于API请求和WebSocket连接');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(70:11)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(71:11)", "entry");
             // 说明文字
             Text.fontSize(14);
             // 说明文字
@@ -184,7 +184,7 @@ class ServerSettings extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 协议选择
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(77:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(78:11)", "entry");
             // 协议选择
             Column.width('100%');
             // 协议选择
@@ -196,7 +196,7 @@ class ServerSettings extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('协议');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(78:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(79:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
             Text.width('100%');
@@ -204,13 +204,13 @@ class ServerSettings extends ViewPU {
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Row.create();
-            Row.debugLine("entry/src/main/ets/pages/ServerSettings.ets(83:13)", "entry");
+            Row.debugLine("entry/src/main/ets/pages/ServerSettings.ets(84:13)", "entry");
             Row.width('100%');
             Row.margin({ top: 8 });
         }, Row);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Radio.create({ value: 'http', group: 'protocol' });
-            Radio.debugLine("entry/src/main/ets/pages/ServerSettings.ets(84:15)", "entry");
+            Radio.debugLine("entry/src/main/ets/pages/ServerSettings.ets(85:15)", "entry");
             Radio.checked(this.protocol === 'http');
             Radio.onChange((isChecked: boolean) => {
                 if (isChecked)
@@ -219,14 +219,14 @@ class ServerSettings extends ViewPU {
         }, Radio);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('HTTP');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(90:15)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(91:15)", "entry");
             Text.fontSize(14);
             Text.margin({ right: 32 });
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Radio.create({ value: 'https', group: 'protocol' });
-            Radio.debugLine("entry/src/main/ets/pages/ServerSettings.ets(94:15)", "entry");
+            Radio.debugLine("entry/src/main/ets/pages/ServerSettings.ets(95:15)", "entry");
             Radio.checked(this.protocol === 'https');
             Radio.onChange((isChecked: boolean) => {
                 if (isChecked)
@@ -235,7 +235,7 @@ class ServerSettings extends ViewPU {
         }, Radio);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('HTTPS');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(100:15)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(101:15)", "entry");
             Text.fontSize(14);
         }, Text);
         Text.pop();
@@ -245,7 +245,7 @@ class ServerSettings extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 服务器地址
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(112:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(113:11)", "entry");
             // 服务器地址
             Column.width('100%');
             // 服务器地址
@@ -257,14 +257,14 @@ class ServerSettings extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('服务器地址');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(113:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(114:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             TextInput.create({ placeholder: '例如: 192.168.1.100', text: this.host });
-            TextInput.debugLine("entry/src/main/ets/pages/ServerSettings.ets(117:13)", "entry");
+            TextInput.debugLine("entry/src/main/ets/pages/ServerSettings.ets(118:13)", "entry");
             TextInput.width('100%');
             TextInput.height(48);
             TextInput.margin({ top: 8 });
@@ -280,7 +280,7 @@ class ServerSettings extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 端口号
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(134:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(135:11)", "entry");
             // 端口号
             Column.width('100%');
             // 端口号
@@ -292,14 +292,14 @@ class ServerSettings extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('端口号');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(135:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(136:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             TextInput.create({ placeholder: '3000', text: this.port });
-            TextInput.debugLine("entry/src/main/ets/pages/ServerSettings.ets(139:13)", "entry");
+            TextInput.debugLine("entry/src/main/ets/pages/ServerSettings.ets(140:13)", "entry");
             TextInput.width('100%');
             TextInput.height(48);
             TextInput.margin({ top: 8 });
@@ -316,7 +316,7 @@ class ServerSettings extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 预览地址
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(157:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/ServerSettings.ets(158:11)", "entry");
             // 预览地址
             Column.width('100%');
             // 预览地址
@@ -328,14 +328,14 @@ class ServerSettings extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('当前地址');
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(158:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(159:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create(`${this.protocol}://${this.host || '(未设置)'}:${this.port || '3000'}`);
-            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(162:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/ServerSettings.ets(163:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#1890ff');
             Text.margin({ top: 8 });
@@ -346,7 +346,7 @@ class ServerSettings extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 测试连接按钮
             Button.createWithLabel(this.testing ? '测试中...' : '测试连接');
-            Button.debugLine("entry/src/main/ets/pages/ServerSettings.ets(173:11)", "entry");
+            Button.debugLine("entry/src/main/ets/pages/ServerSettings.ets(174:11)", "entry");
             // 测试连接按钮
             Button.width('100%');
             // 测试连接按钮
@@ -371,7 +371,7 @@ class ServerSettings extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 保存按钮
             Button.createWithLabel('保存设置');
-            Button.debugLine("entry/src/main/ets/pages/ServerSettings.ets(185:11)", "entry");
+            Button.debugLine("entry/src/main/ets/pages/ServerSettings.ets(186:11)", "entry");
             // 保存按钮
             Button.width('100%');
             // 保存按钮
@@ -402,7 +402,7 @@ class ServerSettings extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 重置按钮
             Button.createWithLabel('恢复默认');
-            Button.debugLine("entry/src/main/ets/pages/ServerSettings.ets(204:11)", "entry");
+            Button.debugLine("entry/src/main/ets/pages/ServerSettings.ets(205:11)", "entry");
             // 重置按钮
             Button.width('100%');
             // 重置按钮

@@ -418,6 +418,13 @@ export class HttpService {
     return this.request('/api/alerts');
   }
 
+  // 标记告警为已读
+  async markAlertRead(alertId: string): Promise<Object> {
+    return this.request(`/api/alerts/${alertId}/read`, {
+      method: http.RequestMethod.PUT
+    });
+  }
+
   // 获取用户信息
   async getUserInfo(): Promise<Object> {
     return this.request('/api/auth/me');

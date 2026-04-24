@@ -52,6 +52,12 @@ const routes = [
         meta: { title: '蓝牙配网' }
       },
       {
+        path: 'video',
+        name: 'VideoMonitor',
+        component: () => import('../views/VideoMonitor.vue'),
+        meta: { title: '视频监控' }
+      },
+      {
         path: 'firmware',
         name: 'Firmware',
         component: () => import('../views/Firmware.vue'),

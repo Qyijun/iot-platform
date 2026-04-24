@@ -6,6 +6,12 @@
     "pages/DeviceDetail",
     "pages/ServerSettings",
     "pages/DeviceProvision",
-    "pages/AddDevice"
+    "pages/AddDevice",
+    "pages/Alerts",
+    "pages/ProfileEdit",
+    "pages/ChangePassword",
+    "pages/Mine",
+    "pages/VideoMonitor",
+    "pages/VideoPlayer"
   ]
 }

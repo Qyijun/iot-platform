@@ -137,7 +137,7 @@ class AddDevice extends ViewPU {
     initialRender() {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(51:5)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(52:5)", "entry");
             Column.width('100%');
             Column.height('100%');
             Column.backgroundColor('#f0f2f5');
@@ -145,7 +145,7 @@ class AddDevice extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 顶部导航
             Row.create();
-            Row.debugLine("entry/src/main/ets/pages/AddDevice.ets(53:7)", "entry");
+            Row.debugLine("entry/src/main/ets/pages/AddDevice.ets(54:7)", "entry");
             // 顶部导航
             Row.width('100%');
             // 顶部导航
@@ -157,14 +157,14 @@ class AddDevice extends ViewPU {
         }, Row);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('<');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(54:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(55:9)", "entry");
             Text.fontSize(24);
             Text.onClick(() => router.back());
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('添加设备');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(58:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(59:9)", "entry");
             Text.fontSize(18);
             Text.fontWeight(FontWeight.Medium);
             Text.layoutWeight(1);
@@ -172,7 +172,7 @@ class AddDevice extends ViewPU {
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(63:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(64:9)", "entry");
             Text.width(24);
         }, Text);
         Text.pop();
@@ -180,18 +180,18 @@ class AddDevice extends ViewPU {
         Row.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Scroll.create();
-            Scroll.debugLine("entry/src/main/ets/pages/AddDevice.ets(71:7)", "entry");
+            Scroll.debugLine("entry/src/main/ets/pages/AddDevice.ets(72:7)", "entry");
             Scroll.layoutWeight(1);
         }, Scroll);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(72:9)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(73:9)", "entry");
             Column.padding(16);
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 设备名称
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(74:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(75:11)", "entry");
             // 设备名称
             Column.width('100%');
             // 设备名称
@@ -203,14 +203,14 @@ class AddDevice extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('设备名称 *');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(75:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(76:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             TextInput.create({ placeholder: '请输入设备名称', text: this.name });
-            TextInput.debugLine("entry/src/main/ets/pages/AddDevice.ets(79:13)", "entry");
+            TextInput.debugLine("entry/src/main/ets/pages/AddDevice.ets(80:13)", "entry");
             TextInput.width('100%');
             TextInput.height(48);
             TextInput.margin({ top: 8 });
@@ -226,7 +226,7 @@ class AddDevice extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 设备类型
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(96:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(97:11)", "entry");
             // 设备类型
             Column.width('100%');
             // 设备类型
@@ -238,14 +238,14 @@ class AddDevice extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('设备类型');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(97:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(98:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Row.create();
-            Row.debugLine("entry/src/main/ets/pages/AddDevice.ets(101:13)", "entry");
+            Row.debugLine("entry/src/main/ets/pages/AddDevice.ets(102:13)", "entry");
             Row.margin({ top: 12 });
         }, Row);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
@@ -254,7 +254,7 @@ class AddDevice extends ViewPU {
                 const t = _item;
                 this.observeComponentCreation2((elmtId, isInitialRender) => {
                     Text.create(t);
-                    Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(103:17)", "entry");
+                    Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(104:17)", "entry");
                     Text.fontSize(14);
                     Text.padding({ left: 16, right: 16, top: 8, bottom: 8 });
                     Text.fontColor(this.type === t ? '#ffffff' : '#666666');
@@ -276,7 +276,7 @@ class AddDevice extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 安装位置
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(123:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(124:11)", "entry");
             // 安装位置
             Column.width('100%');
             // 安装位置
@@ -288,14 +288,14 @@ class AddDevice extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('安装位置');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(124:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(125:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             TextInput.create({ placeholder: '如：客厅、卧室、厨房', text: this.location });
-            TextInput.debugLine("entry/src/main/ets/pages/AddDevice.ets(128:13)", "entry");
+            TextInput.debugLine("entry/src/main/ets/pages/AddDevice.ets(129:13)", "entry");
             TextInput.width('100%');
             TextInput.height(48);
             TextInput.margin({ top: 8 });
@@ -311,7 +311,7 @@ class AddDevice extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 设备密钥 (可选)
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(145:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(146:11)", "entry");
             // 设备密钥 (可选)
             Column.width('100%');
             // 设备密钥 (可选)
@@ -323,14 +323,14 @@ class AddDevice extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('设备密钥 (可选)');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(146:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(147:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             TextInput.create({ placeholder: '设备的唯一标识密钥', text: this.deviceKey });
-            TextInput.debugLine("entry/src/main/ets/pages/AddDevice.ets(150:13)", "entry");
+            TextInput.debugLine("entry/src/main/ets/pages/AddDevice.ets(151:13)", "entry");
             TextInput.width('100%');
             TextInput.height(48);
             TextInput.margin({ top: 8 });
@@ -346,7 +346,7 @@ class AddDevice extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 说明
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(167:11)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/AddDevice.ets(168:11)", "entry");
             // 说明
             Column.width('100%');
             // 说明
@@ -358,14 +358,14 @@ class AddDevice extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('💡 提示');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(168:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(169:13)", "entry");
             Text.fontSize(14);
             Text.fontColor('#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('设备密钥是ESP32烧录固件时设置的唯一标识，用于绑定设备到您的账户。');
-            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(172:13)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/AddDevice.ets(173:13)", "entry");
             Text.fontSize(12);
             Text.fontColor('#999999');
             Text.margin({ top: 8 });
@@ -376,7 +376,7 @@ class AddDevice extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 提交按钮
             Button.createWithLabel(this.isSubmitting ? '添加中...' : '添加设备');
-            Button.debugLine("entry/src/main/ets/pages/AddDevice.ets(183:11)", "entry");
+            Button.debugLine("entry/src/main/ets/pages/AddDevice.ets(184:11)", "entry");
             // 提交按钮
             Button.width('100%');
             // 提交按钮

@@ -26,7 +26,6 @@ build/
 .env.development
 .env.production
 .env.*.local
-# !.env.example 不要排除示例文件
 
 # 固件编译产物
 *.bin
@@ -43,8 +42,6 @@ nginx/ssl/*.crt
 *.bak
 *.swp
 *~
-$null
-console.error(e))
 
 # 旧版本文件（不追踪）
 *.zip
@@ -56,3 +53,11 @@ Thumbs.db
 
 # Git
 .git/
+.github/
+
+# 桌面临时文件
+桌面/*
+!桌面/*.md
+~$*
+*.lnk
+password.txt

@@ -175,7 +175,10 @@ class DeviceDetail extends ViewPU {
     aboutToAppear() {
         const params = router.getParams() as Record<string, string>;
         const id = params?.deviceId || '';
-        if (id) {
+        console.info('=== DeviceDetail: 接收到的参数 ===');
+        console.info('params:', JSON.stringify(params));
+        console.info('deviceId:', id);
+        if (id && id !== 'undefined' && id !== 'null' && id.length > 0) {
             this.deviceId = id;
             this.loadData();
             // 启动定时刷新（每5秒刷新一次）
@@ -185,6 +188,10 @@ class DeviceDetail extends ViewPU {
             this.refreshTimer = setInterval(() => {
                 this.loadData(true);
             }, 5000);
+        }
+        else {
+            console.error('=== DeviceDetail: deviceId 无效，无法加载数据 ===');
+            promptAction.showToast({ message: '设备ID无效' });
         }
     }
     aboutToDisappear() {
@@ -264,11 +271,11 @@ class DeviceDetail extends ViewPU {
     initialRender() {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Stack.create();
-            Stack.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(117:5)", "entry");
+            Stack.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(125:5)", "entry");
         }, Stack);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(118:7)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(126:7)", "entry");
             Column.width('100%');
             Column.height('100%');
             Column.backgroundColor('#f0f2f5');
@@ -276,7 +283,7 @@ class DeviceDetail extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 顶部导航
             Row.create();
-            Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(120:9)", "entry");
+            Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(128:9)", "entry");
             // 顶部导航
             Row.width('100%');
             // 顶部导航
@@ -289,7 +296,7 @@ class DeviceDetail extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 返回按钮
             Text.create('<');
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(122:11)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(130:11)", "entry");
             // 返回按钮
             Text.fontSize(28);
             // 返回按钮
@@ -301,7 +308,7 @@ class DeviceDetail extends ViewPU {
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create(this.device?.name || '设备详情');
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(127:11)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(135:11)", "entry");
             Text.fontSize(18);
             Text.fontWeight(FontWeight.Medium);
             Text.margin({ left: 16 });
@@ -311,7 +318,7 @@ class DeviceDetail extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 刷新按钮
             Text.create('↻');
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(134:11)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(142:11)", "entry");
             // 刷新按钮
             Text.fontSize(22);
             // 刷新按钮
@@ -324,7 +331,7 @@ class DeviceDetail extends ViewPU {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             // 编辑按钮
             Text.create('编辑');
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(140:11)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(148:11)", "entry");
             // 编辑按钮
             Text.fontSize(20);
             // 编辑按钮
@@ -342,7 +349,7 @@ class DeviceDetail extends ViewPU {
                 this.ifElseBranchUpdateFunction(0, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('在线');
-                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(147:13)", "entry");
+                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(155:13)", "entry");
                         Text.fontSize(12);
                         Text.fontColor('#52c41a');
                         Text.margin({ left: 16 });
@@ -354,7 +361,7 @@ class DeviceDetail extends ViewPU {
                 this.ifElseBranchUpdateFunction(1, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('离线');
-                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(152:13)", "entry");
+                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(160:13)", "entry");
                         Text.fontSize(12);
                         Text.fontColor('#ff4d4f');
                         Text.margin({ left: 16 });
@@ -373,14 +380,14 @@ class DeviceDetail extends ViewPU {
                 this.ifElseBranchUpdateFunction(0, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Column.create();
-                        Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(165:11)", "entry");
+                        Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(173:11)", "entry");
                         Column.width('100%');
                         Column.padding(20);
                         Column.backgroundColor('#ffffff');
                     }, Column);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('编辑设备');
-                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(166:13)", "entry");
+                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(174:13)", "entry");
                         Text.fontSize(16);
                         Text.fontWeight(FontWeight.Medium);
                         Text.margin({ bottom: 16 });
@@ -388,7 +395,7 @@ class DeviceDetail extends ViewPU {
                     Text.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         TextInput.create({ placeholder: '设备名称', text: this.editName });
-                        TextInput.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(171:13)", "entry");
+                        TextInput.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(179:13)", "entry");
                         TextInput.width('100%');
                         TextInput.height(44);
                         TextInput.backgroundColor('#f5f5f5');
@@ -399,7 +406,7 @@ class DeviceDetail extends ViewPU {
                     }, TextInput);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         TextInput.create({ placeholder: '安装位置', text: this.editLocation });
-                        TextInput.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(180:13)", "entry");
+                        TextInput.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(188:13)", "entry");
                         TextInput.width('100%');
                         TextInput.height(44);
                         TextInput.margin({ top: 12 });
@@ -411,13 +418,13 @@ class DeviceDetail extends ViewPU {
                     }, TextInput);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Row.create();
-                        Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(190:13)", "entry");
+                        Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(198:13)", "entry");
                         Row.margin({ top: 20 });
                         Row.width('100%');
                     }, Row);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Button.createWithLabel('取消');
-                        Button.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(191:15)", "entry");
+                        Button.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(199:15)", "entry");
                         Button.width('45%');
                         Button.height(40);
                         Button.backgroundColor('#f5f5f5');
@@ -427,7 +434,7 @@ class DeviceDetail extends ViewPU {
                     Button.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Button.createWithLabel('保存');
-                        Button.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(198:15)", "entry");
+                        Button.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(206:15)", "entry");
                         Button.width('45%');
                         Button.height(40);
                         Button.backgroundColor('#1890ff');
@@ -450,7 +457,7 @@ class DeviceDetail extends ViewPU {
                 this.ifElseBranchUpdateFunction(0, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         LoadingProgress.create();
-                        LoadingProgress.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(213:11)", "entry");
+                        LoadingProgress.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(221:11)", "entry");
                         LoadingProgress.width(48);
                         LoadingProgress.height(48);
                         LoadingProgress.layoutWeight(1);
@@ -461,12 +468,12 @@ class DeviceDetail extends ViewPU {
                 this.ifElseBranchUpdateFunction(1, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Scroll.create();
-                        Scroll.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(218:11)", "entry");
+                        Scroll.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(226:11)", "entry");
                         Scroll.layoutWeight(1);
                     }, Scroll);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Column.create();
-                        Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(219:13)", "entry");
+                        Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(227:13)", "entry");
                         Column.padding(16);
                     }, Column);
                     // 实时数据卡片
@@ -476,7 +483,7 @@ class DeviceDetail extends ViewPU {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         // ========== 红色删除按钮 ==========
                         Button.createWithLabel('删除设备');
-                        Button.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(227:15)", "entry");
+                        Button.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(235:15)", "entry");
                         // ========== 红色删除按钮 ==========
                         Button.width('100%');
                         // ========== 红色删除按钮 ==========
@@ -514,7 +521,7 @@ class DeviceDetail extends ViewPU {
                 this.ifElseBranchUpdateFunction(0, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Column.create();
-                        Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(251:9)", "entry");
+                        Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(259:9)", "entry");
                         Column.width('100%');
                         Column.height('100%');
                         Column.backgroundColor('rgba(0,0,0,0.5)');
@@ -525,7 +532,7 @@ class DeviceDetail extends ViewPU {
                     }, Column);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Column.create();
-                        Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(252:11)", "entry");
+                        Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(260:11)", "entry");
                         Column.width('80%');
                         Column.padding(20);
                         Column.backgroundColor('#ffffff');
@@ -533,7 +540,7 @@ class DeviceDetail extends ViewPU {
                     }, Column);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('删除设备');
-                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(253:13)", "entry");
+                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(261:13)", "entry");
                         Text.fontSize(18);
                         Text.fontWeight(FontWeight.Medium);
                         Text.fontColor('#333333');
@@ -542,7 +549,7 @@ class DeviceDetail extends ViewPU {
                     Text.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create(`确定要删除设备"${this.device.name}"吗？`);
-                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(259:13)", "entry");
+                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(267:13)", "entry");
                         Text.fontSize(14);
                         Text.fontColor('#666666');
                         Text.margin({ bottom: 24 });
@@ -551,17 +558,17 @@ class DeviceDetail extends ViewPU {
                     Text.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Divider.create();
-                        Divider.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(265:13)", "entry");
+                        Divider.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(273:13)", "entry");
                         Divider.color('#f0f0f0');
                     }, Divider);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Row.create();
-                        Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(268:13)", "entry");
+                        Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(276:13)", "entry");
                         Row.width('100%');
                     }, Row);
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('取消');
-                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(269:15)", "entry");
+                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(277:15)", "entry");
                         Text.fontSize(16);
                         Text.fontColor('#666666');
                         Text.layoutWeight(1);
@@ -574,7 +581,7 @@ class DeviceDetail extends ViewPU {
                     Text.pop();
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('删除');
-                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(279:15)", "entry");
+                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(287:15)", "entry");
                         Text.fontSize(16);
                         Text.fontColor('#ff4d4f');
                         Text.layoutWeight(1);
@@ -601,7 +608,7 @@ class DeviceDetail extends ViewPU {
     DataCard(parent = null) {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(309:5)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(317:5)", "entry");
             Column.width('100%');
             Column.padding(20);
             Column.backgroundColor('#ffffff');
@@ -610,19 +617,19 @@ class DeviceDetail extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Row.create();
-            Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(310:7)", "entry");
+            Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(318:7)", "entry");
             Row.margin({ bottom: 12 });
         }, Row);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('实时数据');
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(311:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(319:9)", "entry");
             Text.fontSize(16);
             Text.fontWeight(FontWeight.Medium);
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Blank.create();
-            Blank.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(314:9)", "entry");
+            Blank.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(322:9)", "entry");
         }, Blank);
         Blank.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
@@ -631,7 +638,7 @@ class DeviceDetail extends ViewPU {
                 this.ifElseBranchUpdateFunction(0, () => {
                     this.observeComponentCreation2((elmtId, isInitialRender) => {
                         Text.create('更新: ' + this.lastUpdateTime);
-                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(316:11)", "entry");
+                        Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(324:11)", "entry");
                         Text.fontSize(11);
                         Text.fontColor('#999999');
                     }, Text);
@@ -647,7 +654,7 @@ class DeviceDetail extends ViewPU {
         Row.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Grid.create();
-            Grid.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(323:7)", "entry");
+            Grid.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(331:7)", "entry");
             Grid.columnsTemplate('1fr 1fr');
             Grid.rowsTemplate('1fr 1fr');
             Grid.width('100%');
@@ -658,7 +665,7 @@ class DeviceDetail extends ViewPU {
         {
             const itemCreation2 = (elmtId, isInitialRender) => {
                 GridItem.create(() => { }, false);
-                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(324:9)", "entry");
+                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(332:9)", "entry");
             };
             const observedDeepRender = () => {
                 this.observeComponentCreation2(itemCreation2, GridItem);
@@ -670,7 +677,7 @@ class DeviceDetail extends ViewPU {
         {
             const itemCreation2 = (elmtId, isInitialRender) => {
                 GridItem.create(() => { }, false);
-                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(327:9)", "entry");
+                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(335:9)", "entry");
             };
             const observedDeepRender = () => {
                 this.observeComponentCreation2(itemCreation2, GridItem);
@@ -682,7 +689,7 @@ class DeviceDetail extends ViewPU {
         {
             const itemCreation2 = (elmtId, isInitialRender) => {
                 GridItem.create(() => { }, false);
-                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(330:9)", "entry");
+                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(338:9)", "entry");
             };
             const observedDeepRender = () => {
                 this.observeComponentCreation2(itemCreation2, GridItem);
@@ -694,7 +701,7 @@ class DeviceDetail extends ViewPU {
         {
             const itemCreation2 = (elmtId, isInitialRender) => {
                 GridItem.create(() => { }, false);
-                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(333:9)", "entry");
+                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(341:9)", "entry");
             };
             const observedDeepRender = () => {
                 this.observeComponentCreation2(itemCreation2, GridItem);
@@ -709,7 +716,7 @@ class DeviceDetail extends ViewPU {
     DataItem(label: string, value: string, unit: string, color: string, parent = null) {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(353:5)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(361:5)", "entry");
             Column.width('100%');
             Column.height('100%');
             Column.backgroundColor(label === 'LED' || label === '继电器' ? (this.deviceData?.led ? '#f6ffed' : '#fafafa') : '#f9f9f9');
@@ -718,7 +725,7 @@ class DeviceDetail extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create(value + unit);
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(354:7)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(362:7)", "entry");
             Text.fontSize(24);
             Text.fontWeight(FontWeight.Bold);
             Text.fontColor(color);
@@ -726,7 +733,7 @@ class DeviceDetail extends ViewPU {
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create(label);
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(358:7)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(366:7)", "entry");
             Text.fontSize(12);
             Text.fontColor('#999999');
             Text.margin({ top: 4 });
@@ -737,7 +744,7 @@ class DeviceDetail extends ViewPU {
     ControlPanel(parent = null) {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(372:5)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(380:5)", "entry");
             Column.width('100%');
             Column.padding(20);
             Column.backgroundColor('#ffffff');
@@ -745,24 +752,24 @@ class DeviceDetail extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Row.create();
-            Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(373:7)", "entry");
+            Row.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(381:7)", "entry");
             Row.margin({ bottom: 16 });
         }, Row);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('设备控制');
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(374:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(382:9)", "entry");
             Text.fontSize(16);
             Text.fontWeight(FontWeight.Medium);
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Blank.create();
-            Blank.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(377:9)", "entry");
+            Blank.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(385:9)", "entry");
         }, Blank);
         Blank.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create('点击开关进行控制');
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(378:9)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(386:9)", "entry");
             Text.fontSize(11);
             Text.fontColor('#bfbfbf');
         }, Text);
@@ -770,7 +777,7 @@ class DeviceDetail extends ViewPU {
         Row.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Grid.create();
-            Grid.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(384:7)", "entry");
+            Grid.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(392:7)", "entry");
             Grid.columnsTemplate('1fr 1fr');
             Grid.rowsTemplate('1fr 1fr');
             Grid.width('100%');
@@ -781,7 +788,7 @@ class DeviceDetail extends ViewPU {
         {
             const itemCreation2 = (elmtId, isInitialRender) => {
                 GridItem.create(() => { }, false);
-                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(385:9)", "entry");
+                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(393:9)", "entry");
             };
             const observedDeepRender = () => {
                 this.observeComponentCreation2(itemCreation2, GridItem);
@@ -793,7 +800,7 @@ class DeviceDetail extends ViewPU {
         {
             const itemCreation2 = (elmtId, isInitialRender) => {
                 GridItem.create(() => { }, false);
-                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(388:9)", "entry");
+                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(396:9)", "entry");
             };
             const observedDeepRender = () => {
                 this.observeComponentCreation2(itemCreation2, GridItem);
@@ -805,7 +812,7 @@ class DeviceDetail extends ViewPU {
         {
             const itemCreation2 = (elmtId, isInitialRender) => {
                 GridItem.create(() => { }, false);
-                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(391:9)", "entry");
+                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(399:9)", "entry");
             };
             const observedDeepRender = () => {
                 this.observeComponentCreation2(itemCreation2, GridItem);
@@ -817,7 +824,7 @@ class DeviceDetail extends ViewPU {
         {
             const itemCreation2 = (elmtId, isInitialRender) => {
                 GridItem.create(() => { }, false);
-                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(394:9)", "entry");
+                GridItem.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(402:9)", "entry");
             };
             const observedDeepRender = () => {
                 this.observeComponentCreation2(itemCreation2, GridItem);
@@ -832,7 +839,7 @@ class DeviceDetail extends ViewPU {
     ControlButton(name: string, cmd: string, isOn: boolean, parent = null) {
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Column.create();
-            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(415:5)", "entry");
+            Column.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(423:5)", "entry");
             Column.width('100%');
             Column.height('100%');
             Column.backgroundColor(isOn ? '#e6f7ff' : '#fafafa');
@@ -842,14 +849,14 @@ class DeviceDetail extends ViewPU {
         }, Column);
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Text.create(name);
-            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(416:7)", "entry");
+            Text.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(424:7)", "entry");
             Text.fontSize(14);
             Text.fontColor(isOn ? '#1890ff' : '#666666');
         }, Text);
         Text.pop();
         this.observeComponentCreation2((elmtId, isInitialRender) => {
             Toggle.create({ type: ToggleType.Switch, isOn: isOn });
-            Toggle.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(420:7)", "entry");
+            Toggle.debugLine("entry/src/main/ets/pages/DeviceDetail.ets(428:7)", "entry");
             Toggle.selectedColor('#1890ff');
             Toggle.margin({ top: 8 });
             Toggle.onChange((value: boolean) => {

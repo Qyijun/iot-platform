@@ -31,5 +31,13 @@
 			"type":	"media",
 			"name":	"icon",
 			"id":	"0x01000007"
+		}, {
+			"type":	"string",
+			"name":	"bluetooth_permission_reason",
+			"id":	"0x01000008"
+		}, {
+			"type":	"string",
+			"name":	"location_permission_reason",
+			"id":	"0x01000009"
 		}]
 }
